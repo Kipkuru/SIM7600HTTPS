@@ -1,8 +1,8 @@
+#include <SIM7600HTTPS.h>  //This only supports GET and POST
+
+//#define DumpAtCommands
 #define SerialMon Serial // defines the Arduino serial to use for debug
 #define SerialAT Serial1 //this defines the serial port connected to SIM7600; 1 for this case
-
-#include <SIM7600HTTPS.h>  // Use <> for library-style include
-//This only supports GET and POST
 
 #define DumpAtCommands  // Uncomment for AT command dump, comment for simple text
 

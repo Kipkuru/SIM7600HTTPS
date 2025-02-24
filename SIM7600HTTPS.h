@@ -38,10 +38,10 @@ private:
   String sendATCommand(const char* cmd, const char* expected, unsigned long timeout);
   String waitForResponse(const char* expected, unsigned long timeout);
   void clearSerialBuffer();
-  void sendAT();
-  void sendATCPIN();
+  void sendAT(bool& success);
+  void sendATCPIN(bool& success);
   void checkCPINStatus(String response);
-  void sendATCSQ();
+  void sendATCSQ(bool& success);
 
 };
 
