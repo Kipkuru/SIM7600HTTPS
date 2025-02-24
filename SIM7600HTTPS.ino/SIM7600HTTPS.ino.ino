@@ -1,5 +1,5 @@
 #include <SIM7600HTTPS.h>  // Use <> for library-style include
-//This onlly supports GET and POST
+//This only supports GET and POST
 
 #define SerialMon Serial // defines the Arduino serial to use for debug
 #define SerialAT Serial1 //this defines the serial port connected to SIM7600; 1 for this case
@@ -21,15 +21,15 @@ SIM7600HTTPS modem;
 void setup() {
   SerialMon.begin(115200); //initialize serial for debug
   SerialAT.begin(115200); //initialize gsm serial
-  modem.init();
-  modem.gprsConnect(apn);
+  // modem.init();
+  // modem.gprsConnect(apn);
 }
 
 void loop() {
-  modem.httpInit(server);
-  modem.httpGetResource(resourceGet);
-  modem.httpPostData(resourcePut1, postData1);
-  modem.httpPostData(resourcePut2, postData2);
-  modem.httpTerm();
-  delay(20000);
+  // modem.httpInit(server);
+  // modem.httpGetResource(resourceGet);
+  // modem.httpPostData(resourcePut1, postData1);
+  // modem.httpPostData(resourcePut2, postData2);
+  // modem.httpTerm();
+  // delay(20000);
 }
