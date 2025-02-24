@@ -1,4 +1,5 @@
 #include <SIM7600HTTPS.h>  // Use <> for library-style include
+//This onlly supports GET and POST
 
 #define SerialMon Serial // defines the Arduino serial to use for debug
 #define SerialAT Serial1 //this defines the serial port connected to SIM7600; 1 for this case
