@@ -41,6 +41,7 @@ private:
   void sendAT();
   void sendATCPIN();
   void checkCPINStatus(String response);
+  void sendATCSQ();
 
 };
 

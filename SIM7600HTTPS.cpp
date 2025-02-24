@@ -44,7 +44,7 @@ void SIM7600HTTPS::clearSerialBuffer() {
 
 // Private: Send AT command
 void SIM7600HTTPS::sendAT() {
-  String response = sendATCommand("AT", "OK", 1000);
+  String response = sendATCommand("AT", "OK", 5000);
   if (response.indexOf("OK") == -1) {
     SerialMon.println("Check GSM connection");  // Error if no OK
   }
@@ -52,7 +52,7 @@ void SIM7600HTTPS::sendAT() {
 
 // Private: Send AT+CPIN? command and check status
 void SIM7600HTTPS::sendATCPIN() {
-    String response = sendATCommand("AT+CPIN?", "OK", 1000);  // Expect OK as final response
+    String response = sendATCommand("AT+CPIN?", "OK", 5000);  // Expect OK as final response
     if (response.indexOf("+CPIN: READY") != -1 && response.indexOf("OK") != -1) {
       checkCPINStatus(response);  // Check +CPIN: status only if both are present
     } else {
@@ -81,9 +81,34 @@ void SIM7600HTTPS::checkCPINStatus(String response) {
   }
 }
 
+// Private: Send AT+CSQ command and check signal quality (Step 3)
+void SIM7600HTTPS::sendATCSQ() {
+    String response = sendATCommand("AT+CSQ", "OK", 5000);
+    if (response.indexOf("+CSQ:") == -1 || response.indexOf("OK") == -1) {
+      SerialMon.println("Error: Failed to get signal quality response");
+    } else {
+      int csqStart = response.indexOf("+CSQ:") + 6;
+      int csqEnd = response.indexOf(",", csqStart);
+      if (csqEnd == -1) csqEnd = response.indexOf("\r", csqStart);
+      String rssiStr = response.substring(csqStart, csqEnd);
+      int rssi = rssiStr.toInt();
+  
+      if (rssi < 10 || rssi == 99) {
+        SerialMon.println("Error: Signal quality too weak (RSSI: " + String(rssi) + ")");
+      } else {
+  #ifndef DumpAtCommands
+        SerialMon.println("Signal quality check passed (RSSI: " + String(rssi) + ")");
+  #else
+        SerialMon.println("CSQ checked, RSSI: " + String(rssi));
+  #endif
+      }
+    }
+  }
+
 // Public: Initialize modem (Step 1 and 2 - AT and CPIN checks)
 void SIM7600HTTPS::init() {
   sendAT();      // Step 1: Check basic communication
   sendATCPIN();  // Step 2: Check SIM status
+  sendATCSQ();   // Step 3: Check signal quality
   // Success message only if both pass (added later as steps complete)
 }
