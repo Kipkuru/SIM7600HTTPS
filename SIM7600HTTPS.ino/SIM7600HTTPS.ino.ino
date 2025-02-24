@@ -5,16 +5,15 @@
 #define SerialAT Serial1  //this defines the serial port connected to SIM7600; 1 for this case
 
 #define DumpAtCommands  // Uncomment for AT command dump, comment for simple text
+const char* apn = "safaricom";
 
 const char* server = "api.360.mazimobility.com";
 const char* resourceGet = "/iot/api-key/station/mail/read?station_id=23";
-const char* resourcePut1 = "/iot/api-key/station/update/door?station_id=23";
-const char* resourcePut2 = "/iot/api-key/station/update/other?station_id=23";
+const char* resourcePut = "/iot/api-key/station/update/door?station_id=23";
 
-const char* postData1 = "{\"d\":[{\"b\":1,\"st\":1},{\"b\":2,\"st\":0}]}";
-const char* postData2 = "{\"status\":\"update\",\"value\":42}";
-
-const char* apn = "safaricom";
+const char* postData = "{\"d\":[{\"b\":1,\"st\":1},{\"b\":2,\"st\":0}]}";
+unsigned long previousMillis = 0;
+const long interval = 20000;
 SIM7600HTTPS modem;
 
 void setup() {
@@ -23,16 +22,26 @@ void setup() {
   if (modem.init()) {
     if (modem.gprsConnect(apn)) {
       Serial.println("SUCCESS");
+    }else{
+      SerialMon.println("GPRS connection failed");
     }
   }
-  delay(2000);
+  delay(1000);
 }
 
 void loop() {
-  // modem.httpInit(server);
-  // modem.httpGetResource(resourceGet);
-  // modem.httpPostData(resourcePut1, postData1);
-  // modem.httpPostData(resourcePut2, postData2);
-  // modem.httpTerm();
-  // delay(20000);
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    if (modem.httpInit(server, resourcePut)) {  // Start HTTP session at beginning of loop
+      String serverResponse;
+      if (modem.httpPostData(postData, serverResponse)) {  // Perform POST
+        modem.httpTerm();  // Terminate session after successful POST
+      } else {
+        SerialMon.println("HTTP post failed");
+      }
+    } else {
+      SerialMon.println("HTTP initialization failed");
+    }
+  }
 }

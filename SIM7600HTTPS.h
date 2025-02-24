@@ -28,20 +28,22 @@ public:
   bool gprsConnect(const char* apn);  // Connect to GPRS with APN
 
   // HTTP operations
-  bool httpInit(const char* server);       // Initialize HTTP with server URL
-  void httpGetResource(const char* resource);  // Perform GET request on a resource
-  void httpPostData(const char* resource, const char* data);  // Perform POST request with data
-  void httpTerm();                 // Terminate HTTP session
+  bool httpInit(const char* server, const char* resource);      // Initialize HTTP with server URL
+  bool httpGetResource(String& response);// Perform GET request on a resource
+  bool httpPostData(const char* data, String& response);  // Perform POST request with data
+  bool httpTerm();                 // Terminate HTTP session
 
 private:
   // Private helper methods (implementation in .cpp)
   String sendATCommand(const char* cmd, const char* expected, unsigned long timeout);
   String waitForResponse(const char* expected, unsigned long timeout);
   void clearSerialBuffer();
+  //init AT commands
   void sendAT(bool& success);
   void sendATCPIN(bool& success);
   void checkCPINStatus(String response);
   void sendATCSQ(bool& success);
+  //gprsconnect AT commands
   void sendATCGREG(bool& success);
   void sendATCNMP(bool& success);
   void sendATCOPS(bool& success);
@@ -49,6 +51,13 @@ private:
   void sendATCGDCONT(bool& success, const char* apn);
   void sendATCGACT(bool& success);
   void sendATCGPADDR(bool& success);
+  //https AT commands
+  void sendATHTTPTERM(bool& success);
+  void sendATHTTPINIT(bool& success);
+  void sendATHTTPPARA(bool& success, const char* param, const char* value);
+  void sendATHTTPDATA(bool& success, const char* data);
+  void sendATHTTPACTION(bool& success, int method, int& responseLength);
+  String readHTTPResponse(int responseLength, int timeout);
 };
 
 #endif  // End of include guard
