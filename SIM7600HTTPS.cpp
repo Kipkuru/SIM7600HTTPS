@@ -100,7 +100,7 @@ void SIM7600HTTPS::checkCPINStatus(String response) {
 void SIM7600HTTPS::sendATCSQ(bool& success) {
     if (!success) return;  // Skip if previous step failed
     String response = sendATCommand("AT+CSQ", "OK", 5000);
-    if (response.indexOf("+CSQ:") == -1 || response.indexOf("OK") == -1) {
+    if (response.indexOf("+CSQ:") == -1 && response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to get signal quality response");
       success = false;
     } else {
@@ -121,19 +121,153 @@ void SIM7600HTTPS::sendATCSQ(bool& success) {
   #endif
       }
     }
+}
+//Private: Send AT+CGREG? (Step 4 - Network Registration Check)
+void SIM7600HTTPS::sendATCGREG(bool& success) {
+  if (!success) return;
+  String response = sendATCommand("AT+CGREG?", "OK", 5000);
+  if (response.indexOf("OK") == -1 || 
+  (response.indexOf("+CGREG: 0,1") == -1 && response.indexOf("+CGREG: 0,5") == -1)) {
+    SerialMon.println("Error: Not registered on network");
+    success = false;
   }
+#ifndef DumpAtCommands
+  else {
+    SerialMon.println("Network registration confirmed");
+  }
+#endif
+}
+//Private: Send AT+CNMP=38 (Step 5 - Set Preferred Mode to LTE)
+void SIM7600HTTPS::sendATCNMP(bool& success) {
+    if (!success) return;
+    String response = sendATCommand("AT+CNMP=38", "OK", 5000);
+    if (response.indexOf("OK") == -1) {
+      SerialMon.println("Error: Failed to set preferred mode to LTE");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("Preferred mode set to LTE");
+    }
+  #endif
+}
+//Private: Send AT+COPS=0 (Step 6 - Set Operator Selection to Automatic)
+void SIM7600HTTPS::sendATCOPS(bool& success) {
+  if (!success) return;
+  String response = sendATCommand("AT+COPS=0", "OK", 5000);
+  if (response.indexOf("OK") == -1) {
+    SerialMon.println("Error: Failed to set automatic operator selection");
+    success = false;
+  }
+#ifndef DumpAtCommands
+  else {
+    SerialMon.println("Operator selection set to automatic");
+  }
+#endif
+}
+
+//Private: Send AT+CGATT=1 (Step 7 - Attach to GPRS)
+void SIM7600HTTPS::sendATCGATT(bool& success) {
+    if (!success) return;
+    String response = sendATCommand("AT+CGATT=1", "OK", 5000);
+    if (response.indexOf("OK") == -1) {
+      SerialMon.println("Error: Failed to attach to GPRS");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("GPRS attached");
+    }
+  #endif
+}
+
+// Private: Send AT+CGDCONT with variable APN (Step 8)
+void SIM7600HTTPS::sendATCGDCONT(bool& success, const char* apn) {
+    if (!success) return;
+    String cmd = "AT+CGDCONT=1,\"IP\",\"" + String(apn) + "\"";  // Construct command with apn
+    String response = sendATCommand(cmd.c_str(), "OK", 5000);
+    if (response.indexOf("OK") == -1) {
+      SerialMon.println("Error: Failed to set APN");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("APN set to " + String(apn));
+    }
+  #endif
+  }
+//Private: Send AT+CGACT=1,1 (Step 9 - Activate PDP Context)
+void SIM7600HTTPS::sendATCGACT(bool& success) {
+    if (!success) return;
+    String response = sendATCommand("AT+CGACT=1,1", "OK", 5000);
+    if (response.indexOf("OK") == -1) {
+      SerialMon.println("Error: Failed to activate PDP context");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("PDP context activated");
+    }
+  #endif
+}
+
+//Private: Send AT+CGPADDR (Step 10 - Obtain IP Address)
+void SIM7600HTTPS::sendATCGPADDR(bool& success) {
+    if (!success) return;
+    String response = sendATCommand("AT+CGPADDR", "+CGPADDR: 1,", 5000);  // Expect +CGPADDR: 1,<number>
+    if (response.indexOf("+CGPADDR: 1,") == -1) {
+      SerialMon.println("Error: Failed to obtain IP address response");
+      success = false;
+      return;
+    }
+    int ipStart = response.indexOf("1,") + 2;  // Start after "1,"
+    int ipEnd = response.indexOf("\r", ipStart);  // End before newline
+    if (ipEnd == -1) ipEnd = response.length();  // Fallback if no newline
+    String ipAddress = response.substring(ipStart, ipEnd);
+    ipAddress.trim();
+  
+    if (ipAddress == "0.0.0.0") {
+      SerialMon.println("Error: No valid IP address assigned (0.0.0.0)");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("Assigned IP address: " + ipAddress);
+    }
+#else //print nothing
+#endif
+}
 
 // Public: Initialize modem (Step 1 and 2 - AT and CPIN checks)
-void SIM7600HTTPS::init() {
+bool SIM7600HTTPS::init() {
     bool success = true;  // Start with success assumed
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
-  
   #ifndef DumpAtCommands
   if (success) {
     SerialMon.println("GSM initialized successfully");  // Only if all steps pass
   }
   #else//print nothing
 #endif
+return success;
 }
+
+// Public: Connect to GPRS (Steps 4-10)
+bool SIM7600HTTPS::gprsConnect(const char* apn) {
+    bool success = true;
+    sendATCGREG(success);   // Step 4
+    sendATCNMP(success);    // Step 5
+    sendATCOPS(success);    // Step 6
+    sendATCGATT(success);   // Step 7
+    sendATCGDCONT(success, apn);  // Step 8 with variable APN
+    sendATCGACT(success);   // Step 9
+    sendATCGPADDR(success); // Step 10
+  #ifndef DumpAtCommands
+    if (success) {
+      SerialMon.println("GPRS connected successfully");
+    }
+  #else //print nothing
+  #endif
+  return success;
+  }

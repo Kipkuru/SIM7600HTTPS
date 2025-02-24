@@ -24,11 +24,11 @@ public:
   SIM7600HTTPS();
 
   // Initialization and GPRS connection
-  void init();                  // Initialize modem (AT, SIM, signal, etc.)
-  void gprsConnect(const char* apn);  // Connect to GPRS with APN
+  bool init();                  // Initialize modem (AT, SIM, signal, etc.)
+  bool gprsConnect(const char* apn);  // Connect to GPRS with APN
 
   // HTTP operations
-  void httpInit(const char* server);       // Initialize HTTP with server URL
+  bool httpInit(const char* server);       // Initialize HTTP with server URL
   void httpGetResource(const char* resource);  // Perform GET request on a resource
   void httpPostData(const char* resource, const char* data);  // Perform POST request with data
   void httpTerm();                 // Terminate HTTP session
@@ -42,7 +42,13 @@ private:
   void sendATCPIN(bool& success);
   void checkCPINStatus(String response);
   void sendATCSQ(bool& success);
-
+  void sendATCGREG(bool& success);
+  void sendATCNMP(bool& success);
+  void sendATCOPS(bool& success);
+  void sendATCGATT(bool& success);
+  void sendATCGDCONT(bool& success, const char* apn);
+  void sendATCGACT(bool& success);
+  void sendATCGPADDR(bool& success);
 };
 
 #endif  // End of include guard
