@@ -3,6 +3,16 @@
 
 #include <Arduino.h>  // Include Arduino core for Serial, String, etc.
 
+// Notes:
+// - Requires SerialMon and SerialAT to be defined in the .ino (e.g., #define SerialMon Serial, #define SerialAT Serial1)
+
+// Define serial ports if not already defined in .ino
+#ifndef SerialMon
+  #define SerialMon Serial  // Default debug serial
+#endif
+#ifndef SerialAT
+  #define SerialAT Serial1  // Default SIM7600 serial
+#endif
 // Define debug macro if not already defined in .ino
 #ifndef DumpAtCommands
   #define DumpAtCommands  // Default to enabled; .ino can override by defining it first
@@ -25,10 +35,13 @@ public:
 
 private:
   // Private helper methods (implementation in .cpp)
-  void sendATCommand(const char* cmd, unsigned long timeout = 1000);  // Send AT command and wait for response
-  String waitForResponse(const char* expected, unsigned long timeout);  // Wait for specific response
-  void clearSerialBuffer();       // Clear SerialAT buffer
-  
+  String sendATCommand(const char* cmd, const char* expected, unsigned long timeout);
+  String waitForResponse(const char* expected, unsigned long timeout);
+  void clearSerialBuffer();
+  void sendAT();
+  void sendATCPIN();
+  void checkCPINStatus(String response);
+
 };
 
 #endif  // End of include guard

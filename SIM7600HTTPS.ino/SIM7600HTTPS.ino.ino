@@ -1,8 +1,8 @@
-#include <SIM7600HTTPS.h>  // Use <> for library-style include
-//This only supports GET and POST
-
 #define SerialMon Serial // defines the Arduino serial to use for debug
 #define SerialAT Serial1 //this defines the serial port connected to SIM7600; 1 for this case
+
+#include <SIM7600HTTPS.h>  // Use <> for library-style include
+//This only supports GET and POST
 
 #define DumpAtCommands  // Uncomment for AT command dump, comment for simple text
 
@@ -21,7 +21,7 @@ SIM7600HTTPS modem;
 void setup() {
   SerialMon.begin(115200); //initialize serial for debug
   SerialAT.begin(115200); //initialize gsm serial
-  // modem.init();
+  modem.init();
   // modem.gprsConnect(apn);
 }
 
