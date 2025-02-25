@@ -40,7 +40,7 @@ void loop() {
         modem.httpTerm();
       }
     }
-    delay(1000);
+    delay(3000);
     if (modem.httpInit(server, resourcePost)) {  // Start HTTP session at beginning of loop
       String serverResponse;
       if (modem.httpPost(postData, serverResponse)) {  //Perform HTTP POST
