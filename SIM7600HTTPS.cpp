@@ -289,7 +289,7 @@ void SIM7600HTTPS::sendATHTTPTERM(bool& success) {
     // Wait for response
     String response = "";
     unsigned long startTime = millis();
-    while (millis() - startTime < 2000) {  // 1-second timeout
+    while (millis() - startTime < 5000) {  // 1-second timeout
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -364,7 +364,7 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
     String cmd = "AT+HTTPPARA=\"" + String(param) + "\",\"" + String(value) + "\"";
     String response = sendATCommand(cmd.c_str(), "OK", 5000);
     if (response.indexOf("OK") == -1) {
-      SerialMon.println("Error: Failed to set HTTP parameter " + String(param));
+      SerialMon.println("Error: Failed to set HTTP parameter ");
       success = false;
     }
 }
@@ -389,17 +389,48 @@ void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
 //Private: Send AT+HTTPACTION
 void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
     if (!success) return;
+  
+    // Send command silently
     String cmd = "AT+HTTPACTION=" + String(method);
-    String expected = "+HTTPACTION: " + String(method) + ",";
-    String response = sendATCommand(cmd.c_str(), expected.c_str(), 5000);
-    if (response.indexOf(expected) == -1) {
-      SerialMon.println("Error: HTTP action failed");
-      success = false;
-      responseLength = 0;
-    } else {
-      String lengthStr = response.substring(response.lastIndexOf(",") + 1);
-      responseLength = lengthStr.toInt();  // Extract length (e.g., 150)
+    SerialAT.println(cmd);
+  #ifdef DumpAtCommands
+    SerialMon.print("Command: ");
+    SerialMon.println(cmd);
+  #endif
+  
+    // Wait for complete response (+HTTPACTION: <method>,<status>,<length>)
+    String response = "";
+    String expectedStart = "+HTTPACTION: " + String(method) + ",";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 5000) {  // 5-second timeout
+      while (SerialAT.available()) {
+        char c = SerialAT.read();
+        response += c;
+        // Check for full response (ends with newline after length)
+        if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
+  #ifdef DumpAtCommands
+          SerialMon.println("Response: ");
+          SerialMon.print(response);
+  #endif
+          int lengthStart = response.lastIndexOf(",") + 1;
+          int lengthEnd = response.indexOf("\r\n", lengthStart);
+          String lengthStr = response.substring(lengthStart, lengthEnd);
+          responseLength = lengthStr.toInt();  // Extract length (e.g., 66)
+  
+          if (responseLength < 0) {
+            SerialMon.println("Error: Invalid HTTP action response length");
+            success = false;
+          }
+          return;  // Success - full response received
+        }
+      }
+      delay(10);
     }
+  
+    // Timeout or incomplete response
+    SerialMon.println("Error: HTTP action failed - Incomplete response");
+    success = false;
+    responseLength = 0;
 }
 //Private: Read HTTP Response
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
@@ -506,7 +537,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     return success;
 }
 //Public: Perform HTTP GET
-bool SIM7600HTTPS::httpGetResource(String& response) {
+bool SIM7600HTTPS::httpGet(String& response) {
     bool success = true;
     int responseLength = 0;
     sendATHTTPACTION(success, 0, responseLength);  // 0 = GET
@@ -518,7 +549,7 @@ bool SIM7600HTTPS::httpGetResource(String& response) {
     return success;
 }
 //Public: Perform HTTP POST
-bool SIM7600HTTPS::httpPostData(const char* data, String& response) {
+bool SIM7600HTTPS::httpPost(const char* data, String& response) {
     bool success = true;
     int responseLength = 0;
     sendATHTTPDATA(success, data);

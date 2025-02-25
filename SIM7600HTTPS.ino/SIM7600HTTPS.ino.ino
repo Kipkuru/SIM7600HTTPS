@@ -7,7 +7,7 @@
 #define DumpAtCommands  // Uncomment for AT command dump, comment for simple text
 const char* apn = "safaricomiot";
 
-const char* server = "api.360.mazimobility.com";
+const char* server = "https://api.360.mazimobility.com";  //note that it is a must to include https before the url, else error
 const char* resourceGet = "/iot/api-key/station/mail/read?station_id=23";
 const char* resourcePut = "/iot/api-key/station/update/door?station_id=23";
 
@@ -22,7 +22,7 @@ void setup() {
   if (modem.init()) {
     if (modem.gprsConnect(apn)) {
       Serial.println("SUCCESS");
-    }else{
+    } else {
       SerialMon.println("GPRS connection failed");
     }
   }
@@ -30,18 +30,21 @@ void setup() {
 }
 
 void loop() {
-   unsigned long currentMillis = millis();
-   if (currentMillis - previousMillis >= interval) {
-     previousMillis = currentMillis;
-     if (modem.httpInit(server, resourcePut)) {  // Start HTTP session at beginning of loop
-//       String serverResponse;
-//       if (modem.httpPostData(postData, serverResponse)) {  // Perform POST
-       //  modem.httpTerm();  // Terminate session after successful POST
-//       } else {
-//         SerialMon.println("HTTP post failed");
-//       }
-//     } else {
-//       SerialMon.println("HTTP initialization failed");
-     }
-   }
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    if (modem.httpInit(server, resourceGet)) {  // Start HTTP session at beginning of loop
+      String serverResponse;
+      if (modem.httpGet(serverResponse)) {
+        modem.httpTerm();
+      }
+      //       if (modem.httpPostData(postData, serverResponse)) {  // Perform POST
+      //  modem.httpTerm();  // Terminate session after successful POST
+      //       } else {
+      //         SerialMon.println("HTTP post failed");
+      //       }
+      //     } else {
+      //       SerialMon.println("HTTP initialization failed");
+    }
+  }
 }

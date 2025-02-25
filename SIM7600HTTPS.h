@@ -29,8 +29,8 @@ public:
 
   // HTTP operations
   bool httpInit(const char* server, const char* resource);      // Initialize HTTP with server URL
-  bool httpGetResource(String& response);// Perform GET request on a resource
-  bool httpPostData(const char* data, String& response);  // Perform POST request with data
+  bool httpGet(String& response);// Perform GET request on a resource
+  bool httpPost(const char* data, String& response);  // Perform POST request with data
   bool httpTerm();                 // Terminate HTTP session
 
 private:
