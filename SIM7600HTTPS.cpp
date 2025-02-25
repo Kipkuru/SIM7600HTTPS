@@ -434,56 +434,54 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
 }
 //Private: Read HTTP Response
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
-    if (responseLength <= 0) return "";
+    if (responseLength <= 0) 
+    return "";
     String fullResponse = "";
     int bytesRead = 0;
     int chunkSize = 30;  // Adjustable chunk size
-  
+    unsigned long startTime = millis();
     while (bytesRead < responseLength) {
-      int remainingBytes = responseLength - bytesRead;
-      int readSize = (remainingBytes < chunkSize) ? remainingBytes : chunkSize;
-      String readCmd = "AT+HTTPREAD=" + String(readSize);
-  
-      // Send command silently
-      SerialAT.println(readCmd);
-  
-      // Wait for response silently
-      String response = "";
-      unsigned long startTime = millis();
-      while (millis() - startTime < timeout) {
-        while (SerialAT.available()) {
-          char c = SerialAT.read();
-          response += c;
-          if (response.indexOf("+HTTPREAD:") != -1 && 
-              (response.indexOf("\n") > response.indexOf("+HTTPREAD:") || response.endsWith("+HTTPREAD:"))) {
-            int dataStart = response.indexOf("+HTTPREAD: DATA,");
+            int remainingBytes = responseLength - bytesRead;
+            int readSize = (remainingBytes < chunkSize) ? remainingBytes : chunkSize;
+            String readCmd = "AT+HTTPREAD=" + String(readSize);
+            String chunk = sendATCommandSilent(readCmd);
+      
+            int dataStart = chunk.indexOf("+HTTPREAD: DATA,");
             if (dataStart != -1) {
               int lengthStart = dataStart + 16;
-              int lengthEnd = response.indexOf("\r\n", lengthStart);
-              String lengthStr = response.substring(lengthStart, lengthEnd);
+              int lengthEnd = chunk.indexOf("\r\n", lengthStart);
+              String lengthStr = chunk.substring(lengthStart, lengthEnd);
               int actualBytes = lengthStr.toInt();
-  
+      
               int dataBegin = lengthEnd + 2;
               int dataEnd = dataBegin + actualBytes;
-              String dataChunk = response.substring(dataBegin, dataEnd);
-  
+              String dataChunk = chunk.substring(dataBegin, dataEnd);
+      
               fullResponse += dataChunk;
               bytesRead += actualBytes;
-            } else if (response.indexOf("ERROR") != -1 || response.indexOf("+HTTPREAD: 0") != -1) {
-              goto endRead;  // Exit loop on error or no more data
+            } else if (chunk.indexOf("ERROR") != -1 || chunk.indexOf("+HTTPREAD: 0") != -1) {
+              break;
             }
-            break;  // Exit inner loop on valid response
-          }
-        }
-        delay(10);
-      }
+            delay(50);
     }
-  endRead:
-    if (fullResponse.length() > 0) {
-      SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
-    }
+    SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
+    SerialMon.println("Total Bytes Read: " + String(bytesRead));
     return fullResponse;
-  }
+}
+//private: for reading server payload
+String SIM7600HTTPS::sendATCommandSilent(String cmd) {
+    SerialAT.println(cmd);
+    String response = "";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 50) {
+      while (SerialAT.available()) {
+        char c = SerialAT.read();
+        response += c;
+      }
+      delay(10);
+    }
+    return response;
+}
 
 // Public: Initialize modem (Step 1 and 2 - AT and CPIN checks)
 bool SIM7600HTTPS::init() {
@@ -526,6 +524,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     bool success = true;
 
     sendATHTTPINIT(success);  // Start new HTTP session
+    delay(1000);
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());  // Set URL
     sendATHTTPPARA(success, "UA", "SIM7600");  // Set User-Agent
     sendATHTTPPARA(success, "CONTENT", "application/json");  // Set Content-Type
@@ -543,6 +542,7 @@ bool SIM7600HTTPS::httpGet(String& response) {
     sendATHTTPACTION(success, 0, responseLength);  // 0 = GET
     if (success) {
       response = readHTTPResponse(responseLength, 5000);
+      SerialMon.flush();  // Ensure immediate print
     } else {
       response = "";
     }

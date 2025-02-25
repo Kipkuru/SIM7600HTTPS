@@ -59,6 +59,7 @@ private:
   void sendATHTTPDATA(bool& success, const char* data);
   void sendATHTTPACTION(bool& success, int method, int& responseLength);
   String readHTTPResponse(int responseLength, int timeout);
+  String sendATCommandSilent(String cmd);
 };
 
 #endif  // End of include guard
