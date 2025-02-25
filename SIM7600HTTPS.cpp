@@ -173,15 +173,14 @@ void SIM7600HTTPS::sendATCOPS(bool& success) {
 void SIM7600HTTPS::sendATCGATT(bool& success) {
     if (!success) return;
     String response = sendATCommand("AT+CGATT=1", "OK", 5000);
-    if (response.indexOf("OK") == -1) {
-      SerialMon.println("Error: Failed to attach to GPRS");
-      success = false;
-    }
-  #ifndef DumpAtCommands
-    else {
-      SerialMon.println("GPRS attached");
-    }
-  #endif
+    if (response.indexOf("OK") != -1) {
+        #ifndef DumpAtCommands
+            SerialMon.println("PDP context activated");
+        #endif
+    }else{
+            SerialMon.println("Error: Failed to activate PDP context - Unexpected response");
+            success = false;
+          }
 }
 
 // Private: Send AT+CGDCONT with variable APN (Step 8)
@@ -217,35 +216,55 @@ void SIM7600HTTPS::sendATCGACT(bool& success) {
 //Private: Send AT+CGPADDR (Step 10 - Obtain IP Address)
 void SIM7600HTTPS::sendATCGPADDR(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CGPADDR", "+CGPADDR: 1,", 5000);  // Expect +CGPADDR: 1,<number>
-    if (response.indexOf("+CGPADDR: 1,") == -1) {
-      SerialMon.println("Error: Failed to obtain IP address response");
-      success = false;
-      return;
-    }
-    int ipStart = response.indexOf("1,") + 2;  // Start after "1,"
-    int ipEnd = response.indexOf("\r", ipStart);  // End before newline
-    if (ipEnd == -1) ipEnd = response.length();  // Fallback if no newline
-    String ipAddress = response.substring(ipStart, ipEnd);
-    ipAddress.trim();
+    
+    // Send command silently
+    SerialAT.println("AT+CGPADDR");
+ #ifdef DumpAtCommands
+    SerialMon.print("Command: ");  
+    SerialMon.println("AT+CGPADDR");
+  #endif
   
-    if (ipAddress == "0.0.0.0") {
-      SerialMon.println("Error: No valid IP address assigned (0.0.0.0)");
-      success = false;
-    }
+    // Wait for complete response (+CGPADDR: 1,<ip>)
+    String response = "";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 5000) {  // 5-second timeout
+      while (SerialAT.available()) {
+        char c = SerialAT.read();
+        response += c;
+        // Check for full IP address line (ends with newline after IP)
+        if (response.indexOf("+CGPADDR: 1,") != -1 && response.indexOf("\r\n", response.indexOf("+CGPADDR: 1,")) != -1) {
+          int ipStart = response.indexOf("1,") + 2;
+          int ipEnd = response.indexOf("\r\n", ipStart);
+          String ipAddress = response.substring(ipStart, ipEnd);
+          ipAddress.trim();
+  
+          if (ipAddress == "0.0.0.0") {
+            SerialMon.println("Error: No valid IP address assigned (0.0.0.0)");
+            success = false;
+          } else {
   #ifndef DumpAtCommands
-    else {
-      SerialMon.println("Assigned IP address: " + ipAddress);
+            SerialMon.println("Assigned IP address: " + ipAddress);
+  #else
+            SerialMon.print("Response: ");
+            SerialMon.println(response);  // Full response with DumpAtCommands
+  #endif
+          }
+          return;  // Exit once full IP is received
+        }
+      }
+      delay(10);
     }
-#else //print nothing
-#endif
+  
+    // Timeout case
+    SerialMon.println("Error: Failed to obtain IP address response");
+    success = false;
 }
 
 //Private: Send AT+HTTPTERM
 void SIM7600HTTPS::sendATHTTPTERM(bool& success) {
     if (!success) return;
     String response = sendATCommand("AT+HTTPTERM", "OK", 5000);
-    if (response.indexOf("OK") == -1 && response.indexOf("ERROR") == -1) {
+    if (response.indexOf("OK") == -1) == -1) {
       SerialMon.println("Error: Failed to terminate HTTP session");
       success = false;
     }
@@ -304,8 +323,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
 }
 //Private: Read HTTP Response
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
-    if (responseLength <= 0) 
-    return "";
+    if (responseLength <= 0) return "";
     String fullResponse = "";
     int bytesRead = 0;
     int chunkSize = 30;  // Adjustable chunk size
@@ -314,29 +332,44 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
       int remainingBytes = responseLength - bytesRead;
       int readSize = (remainingBytes < chunkSize) ? remainingBytes : chunkSize;
       String readCmd = "AT+HTTPREAD=" + String(readSize);
-      String response = sendATCommand(readCmd.c_str(), "+HTTPREAD:", timeout);
   
-      int dataStart = response.indexOf("+HTTPREAD: DATA,");
-      if (dataStart != -1) {
-        int lengthStart = dataStart + 16;
-        int lengthEnd = response.indexOf("\r\n", lengthStart);
-        String lengthStr = response.substring(lengthStart, lengthEnd);
-        int actualBytes = lengthStr.toInt();
+      // Send command silently
+      SerialAT.println(readCmd);
   
-        int dataBegin = lengthEnd + 2;
-        int dataEnd = dataBegin + actualBytes;
-        String dataChunk = response.substring(dataBegin, dataEnd);
+      // Wait for response silently
+      String response = "";
+      unsigned long startTime = millis();
+      while (millis() - startTime < timeout) {
+        while (SerialAT.available()) {
+          char c = SerialAT.read();
+          response += c;
+          if (response.indexOf("+HTTPREAD:") != -1 && 
+              (response.indexOf("\n") > response.indexOf("+HTTPREAD:") || response.endsWith("+HTTPREAD:"))) {
+            int dataStart = response.indexOf("+HTTPREAD: DATA,");
+            if (dataStart != -1) {
+              int lengthStart = dataStart + 16;
+              int lengthEnd = response.indexOf("\r\n", lengthStart);
+              String lengthStr = response.substring(lengthStart, lengthEnd);
+              int actualBytes = lengthStr.toInt();
   
-        fullResponse += dataChunk;
-        bytesRead += actualBytes;
-      } else if (response.indexOf("ERROR") != -1 || response.indexOf("+HTTPREAD: 0") != -1) {
-        break;
+              int dataBegin = lengthEnd + 2;
+              int dataEnd = dataBegin + actualBytes;
+              String dataChunk = response.substring(dataBegin, dataEnd);
+  
+              fullResponse += dataChunk;
+              bytesRead += actualBytes;
+            } else if (response.indexOf("ERROR") != -1 || response.indexOf("+HTTPREAD: 0") != -1) {
+              goto endRead;  // Exit loop on error or no more data
+            }
+            break;  // Exit inner loop on valid response
+          }
+        }
+        delay(10);
       }
-      delay(50);  // Wait for modem to prepare next chunk
     }
+  endRead:
     if (fullResponse.length() > 0) {
-      SerialMon.println("Complete Response: " + fullResponse);
-      SerialMon.println("Total Bytes Read: " + String(bytesRead));
+      SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
     }
     return fullResponse;
   }
@@ -347,31 +380,32 @@ bool SIM7600HTTPS::init() {
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
-  #ifndef DumpAtCommands
+  //#ifndef DumpAtCommands
   if (success) {
     SerialMon.println("GSM initialized successfully");  // Only if all steps pass
   }
-  #else//print nothing
-#endif
+//#endif
 return success;
 }
 
 // Public: Connect to GPRS (Steps 4-10)
 bool SIM7600HTTPS::gprsConnect(const char* apn) {
     bool success = true;
-    sendATCGREG(success);   // Step 4
-    sendATCNMP(success);    // Step 5
-    sendATCOPS(success);    // Step 6
-    sendATCGATT(success);   // Step 7
-    sendATCGDCONT(success, apn);  // Step 8 with variable APN
-    sendATCGACT(success);   // Step 9
-    sendATCGPADDR(success); // Step 10
-  #ifndef DumpAtCommands
+    
+    sendATCNMP(success);    // Step 4: Set LTE mode first
+   //sendATCOPS(success);    // Step 5: Operator selection- keeps destabilizing the GSM network
+    sendATCGREG(success);   // Step 6: Confirm registration
+    sendATCGATT(success);   // Step 7: Attach GPRS
+    sendATCGDCONT(success, apn);  // Step 8 with variable APN: Define PDP context
+    //delay(1000); for testing purposes
+    sendATCGACT(success);   // Step 9: Activate PDP context
+   // delay(1000);for testing purposes
+    sendATCGPADDR(success); // Step 10: Get IP
+ // #ifndef DumpAtCommands
     if (success) {
       SerialMon.println("GPRS connected successfully");
     }
-  #else //print nothing
-  #endif
+  //#endif
   return success;
 }
 // Public: Initialize HTTP
