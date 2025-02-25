@@ -462,7 +462,7 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
             } else if (chunk.indexOf("ERROR") != -1 || chunk.indexOf("+HTTPREAD: 0") != -1) {
               break;
             }
-            delay(50);
+            delay(10);
     }
     SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
     SerialMon.println("Total Bytes Read: " + String(bytesRead));
@@ -524,7 +524,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     bool success = true;
 
     sendATHTTPINIT(success);  // Start new HTTP session
-    delay(1000);
+   // delay(1000);
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());  // Set URL
     sendATHTTPPARA(success, "UA", "SIM7600");  // Set User-Agent
     sendATHTTPPARA(success, "CONTENT", "application/json");  // Set Content-Type

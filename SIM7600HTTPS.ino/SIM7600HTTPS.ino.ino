@@ -9,7 +9,7 @@ const char* apn = "safaricomiot";
 
 const char* server = "https://api.360.mazimobility.com";  //note that it is a must to include https before the url, else error
 const char* resourceGet = "/iot/api-key/station/mail/read?station_id=23";
-const char* resourcePut = "/iot/api-key/station/update/door?station_id=23";
+const char* resourcePost = "/iot/api-key/station/update/door?station_id=23";
 
 const char* postData = "{\"d\":[{\"b\":1,\"st\":1},{\"b\":2,\"st\":0}]}";
 unsigned long previousMillis = 0;
@@ -35,16 +35,18 @@ void loop() {
     previousMillis = currentMillis;
     if (modem.httpInit(server, resourceGet)) {  // Start HTTP session at beginning of loop
       String serverResponse;
-      if (modem.httpGet(serverResponse)) {
+      if (modem.httpGet(serverResponse)) {  //Perform HTTP GET
+        SerialMon.println("Server Response: " + serverResponse);
         modem.httpTerm();
       }
-      //       if (modem.httpPostData(postData, serverResponse)) {  // Perform POST
-      //  modem.httpTerm();  // Terminate session after successful POST
-      //       } else {
-      //         SerialMon.println("HTTP post failed");
-      //       }
-      //     } else {
-      //       SerialMon.println("HTTP initialization failed");
+    }
+    delay(1000);
+    if (modem.httpInit(server, resourcePost)) {  // Start HTTP session at beginning of loop
+      String serverResponse;
+      if (modem.httpPost(postData, serverResponse)) {  //Perform HTTP POST
+        SerialMon.println("Server Response: " + serverResponse);
+        modem.httpTerm();
+      }
     }
   }
 }
