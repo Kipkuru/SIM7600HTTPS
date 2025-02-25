@@ -56,6 +56,21 @@ void SIM7600HTTPS::clearSerialBuffer() {
   }
 }
 
+//Private: Send AT+CRESET
+void SIM7600HTTPS::sendATCRESET(bool& success) {
+    if (!success) return;
+    String response = sendATCommand("AT+CFUN=1,1", " PB DONE", 60000);  // Reset and wait for RDY
+    if (response.indexOf(" PB DONE") == -1) {
+      SerialMon.println("Error: Failed to reset GSM module");
+      success = false;
+    }
+  #ifndef DumpAtCommands
+    else {
+      SerialMon.println("GSM module reset successfully");
+    }
+  #endif
+  }
+
 // Private: Send AT command
 void SIM7600HTTPS::sendAT(bool& success) {
   String response = sendATCommand("AT", "OK", 5000);
@@ -218,10 +233,10 @@ void SIM7600HTTPS::sendATCGPADDR(bool& success) {
     if (!success) return;
     
     // Send command silently
-    SerialAT.println("AT+CGPADDR");
+    SerialAT.println("AT+CGPADDR=1");
  #ifdef DumpAtCommands
     SerialMon.print("Command: ");  
-    SerialMon.println("AT+CGPADDR");
+    SerialMon.println("AT+CGPADDR=1");
   #endif
   
     // Wait for complete response (+CGPADDR: 1,<ip>)
@@ -263,21 +278,86 @@ void SIM7600HTTPS::sendATCGPADDR(bool& success) {
 //Private: Send AT+HTTPTERM
 void SIM7600HTTPS::sendATHTTPTERM(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+HTTPTERM", "OK", 5000);
-    if (response.indexOf("OK") == -1) == -1) {
-      SerialMon.println("Error: Failed to terminate HTTP session");
-      success = false;
+  
+    // Send command silently
+    SerialAT.println("AT+HTTPTERM");
+  #ifdef DumpAtCommands
+    SerialMon.print("Command: ");
+    SerialMon.println("AT+HTTPTERM");
+  #endif
+  
+    // Wait for response
+    String response = "";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 2000) {  // 1-second timeout
+      while (SerialAT.available()) {
+        char c = SerialAT.read();
+        response += c;
+        if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) {
+  #ifdef DumpAtCommands
+          SerialMon.println("Response: ");
+          SerialMon.print(response);
+          SerialMon.println();
+  #endif
+    if(response.indexOf("OK")){
+        SerialMon.println("Existing HTTP session terminated");
+        return;
+    }else if(response.indexOf("ERROR")){
+        SerialMon.println("No existing HTTP session");
+        return;
     }
+    //return;  // Success - OK or ERROR means termination complete
+    }
+      }
+      delay(10);
+ }
+  
+    // Timeout or unexpected response
+    SerialMon.println("Error: Failed to terminate HTTP session - No valid response");
+    success = false;
 }
 //Private: Send AT+HTTPINIT
 void SIM7600HTTPS::sendATHTTPINIT(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+HTTPINIT", "OK", 5000);
-    if (response.indexOf("OK") == -1) {
-      SerialMon.println("Error: Failed to initialize HTTP session");
-      success = false;
+  
+    // Send AT+HTTPINIT silently
+    SerialAT.println("AT+HTTPINIT");
+  #ifdef DumpAtCommands
+    SerialMon.print("Command: ");
+    SerialMon.println("AT+HTTPINIT");
+  #endif
+  
+    // Wait for response
+    String response = "";
+    unsigned long startTime = millis();
+    while (millis() - startTime < 5000) {  // 1-second timeout
+      while (SerialAT.available()) {
+        char c = SerialAT.read();
+        response += c;
+        if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) {
+  #ifdef DumpAtCommands
+          SerialMon.println("Response: ");
+          SerialMon.print(response);
+          SerialMon.println();
+  #endif
+          if (response.indexOf("OK") != -1) {
+            SerialMon.println("HTTP session success");
+            // Success - proceed
+            return;
+          } else if (response.indexOf("ERROR") != -1) {
+            SerialMon.println("Error: Active HTTP session running");
+            return;
+          }
+        }
+      }
+      delay(10);
     }
+  
+    // Timeout or unexpected response
+    SerialMon.println("Error: Failed to initialize HTTP session - No valid response");
+    success = false;
 }
+
 //Private: Send AT+HTTPPARA
 void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* value) {
     if (!success) return;
@@ -377,6 +457,8 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
 // Public: Initialize modem (Step 1 and 2 - AT and CPIN checks)
 bool SIM7600HTTPS::init() {
     bool success = true;  // Start with success assumed
+  //sendATCRESET(success);  // Reset module first
+  //delay(2000);
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
@@ -393,7 +475,7 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
     bool success = true;
     
     sendATCNMP(success);    // Step 4: Set LTE mode first
-   //sendATCOPS(success);    // Step 5: Operator selection- keeps destabilizing the GSM network
+   //sendATCOPS(success);    // Step 5: Operator selection- keeps destabilizing the GSM board
     sendATCGREG(success);   // Step 6: Confirm registration
     sendATCGATT(success);   // Step 7: Attach GPRS
     sendATCGDCONT(success, apn);  // Step 8 with variable APN: Define PDP context
@@ -411,7 +493,7 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     bool success = true;
-    sendATHTTPTERM(success);  // Terminate any existing session
+
     sendATHTTPINIT(success);  // Start new HTTP session
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());  // Set URL
     sendATHTTPPARA(success, "UA", "SIM7600");  // Set User-Agent

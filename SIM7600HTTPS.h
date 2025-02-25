@@ -39,6 +39,7 @@ private:
   String waitForResponse(const char* expected, unsigned long timeout);
   void clearSerialBuffer();
   //init AT commands
+  void sendATCRESET(bool& success);  // New reset function
   void sendAT(bool& success);
   void sendATCPIN(bool& success);
   void checkCPINStatus(String response);

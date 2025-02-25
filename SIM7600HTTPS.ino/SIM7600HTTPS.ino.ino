@@ -13,7 +13,7 @@ const char* resourcePut = "/iot/api-key/station/update/door?station_id=23";
 
 const char* postData = "{\"d\":[{\"b\":1,\"st\":1},{\"b\":2,\"st\":0}]}";
 unsigned long previousMillis = 0;
-const long interval = 20000;
+const long interval = 10000;
 SIM7600HTTPS modem;
 
 void setup() {
@@ -30,18 +30,18 @@ void setup() {
 }
 
 void loop() {
-//   unsigned long currentMillis = millis();
-//   if (currentMillis - previousMillis >= interval) {
-//     previousMillis = currentMillis;
-//     if (modem.httpInit(server, resourcePut)) {  // Start HTTP session at beginning of loop
+   unsigned long currentMillis = millis();
+   if (currentMillis - previousMillis >= interval) {
+     previousMillis = currentMillis;
+     if (modem.httpInit(server, resourcePut)) {  // Start HTTP session at beginning of loop
 //       String serverResponse;
 //       if (modem.httpPostData(postData, serverResponse)) {  // Perform POST
-//         modem.httpTerm();  // Terminate session after successful POST
+       //  modem.httpTerm();  // Terminate session after successful POST
 //       } else {
 //         SerialMon.println("HTTP post failed");
 //       }
 //     } else {
 //       SerialMon.println("HTTP initialization failed");
-//     }
-//   }
+     }
+   }
 }
