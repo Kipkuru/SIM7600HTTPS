@@ -393,7 +393,13 @@ void SIM7600HTTPS::sendATHTTPINIT(bool& success) {
 //Private: Send AT+HTTPPARA
 void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* value) {
     if (!success) return;
-    String cmd = "AT+HTTPPARA=\"" + String(param) + "\",\"" + String(value) + "\"";
+      String cmd;
+    // Check if param is "CONNECTTO" to send value without quotes
+    if (strcmp(param, "CONNECTTO") == 0) {
+      cmd = "AT+HTTPPARA=\"" + String(param) + "\"," + String(value);  // No quotes around value
+    } else {
+      cmd = "AT+HTTPPARA=\"" + String(param) + "\",\"" + String(value) + "\"";  // Quotes around value
+    }
     String response = sendATCommand(cmd.c_str(), "OK", 5000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set HTTP parameter ");
@@ -434,7 +440,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
     String response = "";
     String expectedStart = "+HTTPACTION: " + String(method) + ",";
     unsigned long startTime = millis();
-    while (millis() - startTime < 10000) {  // 5-second timeout
+    while (millis() - startTime < 60000) {  // 10-second timeout
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -444,10 +450,21 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
           SerialMon.println("Response: ");
           SerialMon.print(response);
   #endif
-          int lengthStart = response.lastIndexOf(",") + 1;
+          int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
+          int statusEnd = response.indexOf(",", statusStart);
+          String statusStr = response.substring(statusStart, statusEnd);
+          int status = statusStr.toInt();
+
+          int lengthStart = statusEnd + 1;
           int lengthEnd = response.indexOf("\r\n", lengthStart);
           String lengthStr = response.substring(lengthStart, lengthEnd);
-          responseLength = lengthStr.toInt();  // Extract length (e.g., 66)
+          responseLength = lengthStr.toInt();
+
+          if (status == 713 && responseLength == 0) {
+            SerialMon.println("Error: No internet connection detected (HTTPACTION 713)");
+            success = false;
+            return;
+          }
   
           if (responseLength < 0) {
             SerialMon.println("Error: Invalid HTTP action response length");
@@ -556,7 +573,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     bool success = true;
 
     sendATHTTPINIT(success);  // Start new HTTP session
-   // delay(1000);
+    delay(500);
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());  // Set URL
     sendATHTTPPARA(success, "UA", "SIM7600");  // Set User-Agent
     sendATHTTPPARA(success, "CONTENT", "application/json");  // Set Content-Type
