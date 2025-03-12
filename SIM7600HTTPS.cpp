@@ -216,16 +216,48 @@ void SIM7600HTTPS::sendATCGDCONT(bool& success, const char* apn) {
 //Private: Send AT+CGACT=1,1 (Step 9 - Activate PDP Context)
 void SIM7600HTTPS::sendATCGACT(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CGACT=1,1", "OK", 5000);
+
+    // Step 1: Check current PDP context state with AT+CGACT?
+    SerialAT.println("AT+CGACT?");
+    #ifdef DumpAtCommands
+      SerialMon.print("Command: ");
+      SerialMon.println("AT+CGACT?");
+    #endif
+
+      String response = "";
+      unsigned long startTime = millis();
+      while (millis() - startTime < 1000) {  // 1-second timeout for CGACT?
+        while (SerialAT.available()) {
+          char c = SerialAT.read();
+          response += c;
+          if (response.indexOf("OK") != -1) {  // Wait for complete response ending with OK
+    #ifdef DumpAtCommands
+            SerialMon.println("Response: ");
+            SerialMon.print(response);
+    #endif
+            if (response.indexOf("+CGACT: 1,1") != -1) {
+              // PDP context 1 is already active - exit with success
+    #ifndef DumpAtCommands
+              SerialMon.println("PDP context 1 already active - skipping activation");
+    #endif
+              return;  // success remains true
+            }
+            break;  // Proceed to activation if not active
+          }
+        }
+        delay(10);
+      }
+// Step 2: If not active, send AT+CGACT=1,1
+    response = sendATCommand("AT+CGACT=1,1", "OK", 5000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to activate PDP context");
       success = false;
     }
-  #ifndef DumpAtCommands
+  //#ifndef DumpAtCommands
     else {
       SerialMon.println("PDP context activated");
     }
-  #endif
+ // #endif
 }
 
 //Private: Send AT+CGPADDR (Step 10 - Obtain IP Address)
