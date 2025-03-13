@@ -427,6 +427,10 @@ void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
 //Private: Send AT+HTTPACTION
 void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
     if (!success) return;
+
+  static int noInternetCount = 0;  // Tracks consecutive no-internet failures
+  const int networkErrorCodes[] = {709, 713, 714, 717};  // Network-related errors
+  const int numNetworkErrors = sizeof(networkErrorCodes) / sizeof(networkErrorCodes[0]);
   
     // Send command silently
     String cmd = "AT+HTTPACTION=" + String(method);
@@ -440,7 +444,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
     String response = "";
     String expectedStart = "+HTTPACTION: " + String(method) + ",";
     unsigned long startTime = millis();
-    while (millis() - startTime < 60000) {  // 10-second timeout
+    while (millis() - startTime < 90000) {  // 90-second timeout to ensure error codes are captures
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -460,10 +464,30 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
           String lengthStr = response.substring(lengthStart, lengthEnd);
           responseLength = lengthStr.toInt();
 
-          if (status == 713 && responseLength == 0) {
-            SerialMon.println("Error: No internet connection detected (HTTPACTION 713)");
+          // Check for network failure: error code AND zero length
+          bool isNetworkFailure = false;
+          for (int i = 0; i < numNetworkErrors; i++) {
+            if (status == networkErrorCodes[i] && responseLength == 0) {
+              isNetworkFailure = true;
+              break;
+            }
+          }
+          if (isNetworkFailure) {
+            noInternetCount++;
+            SerialMon.println("Error: No internet detected (HTTPACTION " + String(status) + ", Length: 0) - Count: " + String(noInternetCount));
+            if (noInternetCount == 2) {
+              //sendSMS("+1234567890", "Device has no internet connection.", success);  // Replace with customer care number
+              SerialMon.println("+1234567890 Device has no internet connection.");  // Replace with customer care number
+              noInternetCount = 0;  // Reset after SMS
+            }
             success = false;
             return;
+          } else if (responseLength > 0) {
+            noInternetCount = 0;  // Reset on any payload from server
+            SerialMon.println("HTTPACTION returned status: " + String(status) + ", Length: " + String(responseLength));
+          } else {
+            // Non-network error with zero length (rare) - log but don’t count
+            SerialMon.println("HTTPACTION returned status: " + String(status) + ", Length: 0");
           }
   
           if (responseLength < 0) {
@@ -480,6 +504,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
     SerialMon.println("Error: HTTP action failed - Incomplete response");
     success = false;
     responseLength = 0;
+    noInternetCount = 0;  // Reset on timeout
 }
 //Private: Read HTTP Response
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
