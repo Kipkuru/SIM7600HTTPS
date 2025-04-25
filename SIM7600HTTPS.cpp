@@ -158,7 +158,7 @@ void SIM7600HTTPS::sendATCGREG(bool& success) {
 //Private: Send AT+CNMP=38 (Step 5 - Set Preferred Mode to LTE)
 void SIM7600HTTPS::sendATCNMP(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CNMP=38", "OK", 5000);
+    String response = sendATCommand("AT+CNMP=39", "OK", 5000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set preferred mode to LTE");
       success = false;

@@ -22,6 +22,8 @@ class SIM7600HTTPS {
 public:
   // Constructor
   SIM7600HTTPS();
+//check Data balance
+  String checkDataBalance(String ussdCode);
 
   // Initialization and GPRS connection
   bool init();                  // Initialize modem (AT, SIM, signal, etc.)
