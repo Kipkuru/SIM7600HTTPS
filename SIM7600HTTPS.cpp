@@ -444,7 +444,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
     String response = "";
     String expectedStart = "+HTTPACTION: " + String(method) + ",";
     unsigned long startTime = millis();
-    while (millis() - startTime < 5000) {  // 90-second timeout to ensure error codes are captures
+    while (millis() - startTime < 30000) {  // 90-second timeout to ensure error codes are captures
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
