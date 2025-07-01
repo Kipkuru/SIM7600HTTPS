@@ -2,11 +2,10 @@
 
 //#define DumpAtCommands
 #define SerialMon Serial  // defines the Arduino serial to use for debug
-//#define SerialAT Serial1  //this defines the serial port connected to SIM7600; 1 for this case
-HardwareSerial SerialAT(2);  // Use UART2 on ESP32 (TX = 17, RX = 16)
+#define SerialAT Serial1  //this defines the serial port connected to SIM7600; 1 for this case
 
 #define DumpAtCommands  // Uncomment for AT command dump, comment for simple text
-const char* apn = "safaricomiot";
+const char* apn = "safaricom";
 
 const char* server = "http://voyager.mazimobility.com:5500";  //note that it is a must to include https before the url, else error
 const char* resourceGet = "/api/v1/charging-stations-status/0";

@@ -411,7 +411,7 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
     String cmd = "AT+HTTPDATA=" + String(strlen(data)) + ",10000";
-    String response = sendATCommand(cmd.c_str(), "DOWNLOAD", 1000);
+    String response = sendATCommand(cmd.c_str(), "DOWNLOAD", 5000);
     if (response.indexOf("DOWNLOAD") != -1) {
       SerialAT.println(data);
       response = waitForResponse("OK", 3000);  // Wait for OK after data
@@ -444,7 +444,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
     String response = "";
     String expectedStart = "+HTTPACTION: " + String(method) + ",";
     unsigned long startTime = millis();
-    while (millis() - startTime < 90000) {  // 90-second timeout to ensure error codes are captures
+    while (millis() - startTime < 5000) {  // 90-second timeout to ensure error codes are captures
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
