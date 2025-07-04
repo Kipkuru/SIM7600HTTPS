@@ -2,7 +2,6 @@
 #define SIM7600HTTPS_H
 
 #include <Arduino.h>  // Include Arduino core for Serial, String, etc.
-
 // Notes:
 // - Requires SerialMon and SerialAT to be defined in the .ino (e.g., #define SerialMon Serial, #define SerialAT Serial1)
 
@@ -13,10 +12,19 @@
 #ifndef SerialAT
   #define SerialAT Serial1  // Default SIM7600 serial
 #endif
-// Define debug macro if not already defined in .ino
-#ifndef DumpAtCommands
-  #define DumpAtCommands  // Default to enabled; .ino can override by defining it first
+// If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
+// #ifndef DumpAtCommands
+//   #define DumpAtCommands 1
+// #endif
+
+#if DumpAtCommands 
+  #define DEBUG_PRINT(x)    Serial.print(x)
+  #define DEBUG_PRINTLN(x)  Serial.println(x)
+#else
+  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
 #endif
+
 
 class SIM7600HTTPS {
 public:
