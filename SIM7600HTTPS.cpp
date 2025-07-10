@@ -58,7 +58,7 @@ void SIM7600HTTPS::sendATCRESET(bool& success) {
 
 // Private: Send AT command
 void SIM7600HTTPS::sendAT(bool& success) {
-  String response = sendATCommand("AT", "OK", 5000);
+  String response = sendATCommand("AT", "OK", 1000);
   if (response.indexOf("OK") == -1) {
     SerialMon.println("Check GSM connection");  // Error if no OK
     success = false;
@@ -99,7 +99,7 @@ void SIM7600HTTPS::checkCPINStatus(String response) {
 // Private: Send AT+CSQ command and check signal quality (Step 3)
 void SIM7600HTTPS::sendATCSQ(bool& success) {
     if (!success) return;  // Skip if previous step failed
-    String response = sendATCommand("AT+CSQ", "OK", 5000);
+    String response = sendATCommand("AT+CSQ", "OK", 1000);
     if (response.indexOf("+CSQ:") == -1 && response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to get signal quality response");
       success = false;
@@ -122,7 +122,7 @@ void SIM7600HTTPS::sendATCSQ(bool& success) {
 //Private: Send AT+CGREG? (Step 4 - Network Registration Check)
 void SIM7600HTTPS::sendATCGREG(bool& success) {
   if (!success) return;
-  String response = sendATCommand("AT+CGREG?", "OK", 5000);
+  String response = sendATCommand("AT+CGREG?", "OK", 1000);
   if (response.indexOf("OK") == -1 || 
   (response.indexOf("+CGREG: 0,1") == -1 && response.indexOf("+CGREG: 0,5") == -1)) {
     SerialMon.println("Error: SIM Not registered on network");
@@ -135,7 +135,7 @@ void SIM7600HTTPS::sendATCGREG(bool& success) {
 //Private: Send AT+CNMP=38 (Step 5 - Set Preferred Mode to LTE)
 void SIM7600HTTPS::sendATCNMP(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CNMP=39", "OK", 5000);
+    String response = sendATCommand("AT+CNMP=39", "OK", 1000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set preferred mode to LTE");
       success = false;
@@ -147,7 +147,7 @@ void SIM7600HTTPS::sendATCNMP(bool& success) {
 //Private: Send AT+COPS=0 (Step 6 - Set Operator Selection to Automatic)
 void SIM7600HTTPS::sendATCOPS(bool& success) {
   if (!success) return;
-  String response = sendATCommand("AT+COPS=0", "OK", 5000);
+  String response = sendATCommand("AT+COPS=0", "OK", 1000);
   if (response.indexOf("OK") == -1) {
     SerialMon.println("Error: Failed to set automatic operator selection");
     success = false;
@@ -162,7 +162,7 @@ void SIM7600HTTPS::sendATCOPS(bool& success) {
 //Private: Send AT+CGATT=1 (Step 7 - Attach to GPRS)
 void SIM7600HTTPS::sendATCGATT(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CGATT=1", "OK", 5000);
+    String response = sendATCommand("AT+CGATT=1", "OK", 1500);
     if (response.indexOf("OK") != -1) {
             DEBUG_PRINTLN("PDP context activated");
     }else{
@@ -175,7 +175,7 @@ void SIM7600HTTPS::sendATCGATT(bool& success) {
 void SIM7600HTTPS::sendATCGDCONT(bool& success, const char* apn) {
     if (!success) return;
     String cmd = "AT+CGDCONT=1,\"IP\",\"" + String(apn) + "\"";  // Construct command with apn
-    String response = sendATCommand(cmd.c_str(), "OK", 5000);
+    String response = sendATCommand(cmd.c_str(), "OK", 1500);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set APN");
       success = false;
@@ -215,7 +215,7 @@ void SIM7600HTTPS::sendATCGACT(bool& success) {
         delay(10);
       }
 // Step 2: If not active, send AT+CGACT=1,1
-    response = sendATCommand("AT+CGACT=1,1", "OK", 5000);
+    response = sendATCommand("AT+CGACT=1,1", "OK", 1000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to activate PDP context");
       success = false;
@@ -237,7 +237,7 @@ void SIM7600HTTPS::sendATCGPADDR(bool& success) {
     // Wait for complete response (+CGPADDR: 1,<ip>)
     String response = "";
     unsigned long startTime = millis();
-    while (millis() - startTime < 5000) {  // 5-second timeout
+    while (millis() - startTime < 2000) {  // 5-second timeout
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -279,7 +279,7 @@ void SIM7600HTTPS::sendATHTTPTERM(bool& success) {
     // Wait for response
     String response = "";
     unsigned long startTime = millis();
-    while (millis() - startTime < 5000) {  // 1-second timeout
+    while (millis() - startTime < 1000) {  // 1-second timeout
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -318,7 +318,7 @@ void SIM7600HTTPS::sendATHTTPINIT(bool& success) {
     // Wait for response
     String response = "";
     unsigned long startTime = millis();
-    while (millis() - startTime < 5000) {  // 1-second timeout
+    while (millis() - startTime < 1000) {  // 1-second timeout
       while (SerialAT.available()) {
         char c = SerialAT.read();
         response += c;
@@ -353,7 +353,7 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
     } else {
       cmd = "AT+HTTPPARA=\"" + String(param) + "\",\"" + String(value) + "\"";  // Quotes around value
     }
-    String response = sendATCommand(cmd.c_str(), "OK", 5000);
+    String response = sendATCommand(cmd.c_str(), "OK", 1000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set HTTP parameter ");
       success = false;
@@ -437,7 +437,7 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
     return "";
   String fullResponse = "";
   int bytesRead = 0;
-  int chunkSize = 128;  // Adjustable chunk size
+  int chunkSize = 64;  // Adjustable chunk size
   unsigned long startTime = millis();
   while (bytesRead < responseLength) {
     int remainingBytes = responseLength - bytesRead;
@@ -507,13 +507,13 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
     sendATCGACT(success);   // Step 9: Activate PDP context
    // delay(1000);for testing purposes
     sendATCGPADDR(success); // Step 10: Get IP
-    sendATHTTPINIT(success);  // Start new HTTP session
+    
   return success;
 }
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
     bool success = true;
-
+    sendATHTTPINIT(success);  // Start new HTTP session
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());  // Set URL
     sendATHTTPPARA(success, "UA", "SIM7600");  // Set User-Agent
     sendATHTTPPARA(success, "CONTENT", "application/json");  // Set Content-Type

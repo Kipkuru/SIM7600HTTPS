@@ -12,7 +12,7 @@
 #ifndef SerialAT
   #define SerialAT Serial1  // Default SIM7600 serial
 #endif
-// If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
+// //If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
 // #ifndef DumpAtCommands
 //   #define DumpAtCommands 1
 // #endif
@@ -38,6 +38,7 @@ public:
   bool gprsConnect(const char* apn);  // Connect to GPRS with APN
 
   // HTTP operations
+  bool startHttpSession(bool& success);  // Initialize HTTP session
   bool httpInit(const char* server, const char* resource);      // Initialize HTTP with server URL
   bool httpGet(String& response);// Perform GET request on a resource
   bool httpPost(const char* data, String& response);  // Perform POST request with data
