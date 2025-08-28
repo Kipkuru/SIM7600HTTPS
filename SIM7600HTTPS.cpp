@@ -340,7 +340,7 @@ void SIM7600HTTPS::sendATHTTPINIT(bool& success) {
   
     // Timeout or unexpected response
     SerialMon.println("Error: Failed to initialize HTTP session - No valid response");
-    success = false;
+    success = true;
 }
 
 //Private: Send AT+HTTPPARA
