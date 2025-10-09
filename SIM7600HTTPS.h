@@ -71,6 +71,9 @@ private:
   void sendATHTTPACTION(bool& success, int method, int& responseLength);
   String readHTTPResponse(int responseLength, int timeout);
   String sendATCommandSilent(String cmd);
+
+  bool paramsSet = false;  // New: Track if parameters are set
+  String currentResource = "";  // New: Track current resource for reuse
 };
 
 #endif  // End of include guard
