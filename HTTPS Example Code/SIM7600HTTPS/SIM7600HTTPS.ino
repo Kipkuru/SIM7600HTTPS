@@ -49,7 +49,7 @@ void loop() {
   if (currentMillis - previousMillisPost >= postInterval) {
     previousMillisPost = currentMillis;  // Update last POST time
 
-    if (modem.httpInit(server, resourcePost)) {  // Initialize HTTP session for POST
+    if (modem.httpInit(server, resourcePost, 1)) {  // Initialize HTTP session for POST
       String serverResponse;
       if (modem.httpPost(postData, serverResponse)) {  // Execute POST request with JSON data
         Serial.println("POST Response: " + serverResponse);  // Print server response

@@ -39,7 +39,7 @@ public:
 
   // HTTP operations
   bool startHttpSession(bool& success);  // Initialize HTTP session
-  bool httpInit(const char* server, const char* resource);      // Initialize HTTP with server URL
+  bool httpInit(const char* server, const char* resource, int method = 0); // Initialize HTTP with server URL, method (0=GET, 1=POST)
   bool httpGet(String& response);// Perform GET request on a resource
   bool httpPost(const char* data, String& response);  // Perform POST request with data
   bool httpTerm();                 // Terminate HTTP session
@@ -74,6 +74,8 @@ private:
 
   bool paramsSet = false;  // New: Track if parameters are set
   String currentResource = "";  // New: Track current resource for reuse
+  bool sessionActive = false;  // Track session state
+  bool needsReinit = false;    // New: Flag for re-init on failure
 };
 
 #endif  // End of include guard
