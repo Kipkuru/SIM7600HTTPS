@@ -66,7 +66,7 @@ private:
   //https AT commands
   void sendATHTTPTERM(bool& success);
   void sendATHTTPINIT(bool& success);
-  void sendATHTTPPARA(bool& success, const char* param, const char* value);
+  void sendATHTTPPARA(bool& success, const char* param, const char* value, int maxRetries = 3);  // Added maxRetries
   void sendATHTTPDATA(bool& success, const char* data);
   void sendATHTTPACTION(bool& success, int method, int& responseLength);
   String readHTTPResponse(int responseLength, int timeout);

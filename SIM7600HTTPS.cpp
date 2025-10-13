@@ -284,7 +284,7 @@ void SIM7600HTTPS::sendATHTTPTERM(bool& success) {
         if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) {
           DEBUG_PRINT("Response: ");
           DEBUG_PRINTLN(response);
-          DEBUG_PRINTLN();
+          //DEBUG_PRINTLN();
 
     if(response.indexOf("OK")){
         DEBUG_PRINTLN("Existing HTTP session terminated");
@@ -344,7 +344,7 @@ void SIM7600HTTPS::sendATHTTPINIT(bool& success) {
 }
 
 
-void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* value) {
+void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* value, int maxRetries) {
     if (!success) return;
       String cmd;
     // Check if param is "CONNECTTO" to send value without quotes
@@ -355,19 +355,19 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
     }
     
     bool paramSet = false;
-    for (int retry = 1; retry <= 3 && !paramSet; retry++) {
+    for (int retry = 1; retry <= maxRetries && !paramSet; retry++) {
       String response = sendATCommand(cmd.c_str(), "OK", 1000);
       if (response.indexOf("OK") != -1) {
         paramSet = true;  // Success, break loop
       } else {
-        SerialMon.println("Retry " + String(retry) + " for parameter " + String(param) + " failed");
+        DEBUG_PRINTLN("Retry " + String(retry) + "/" + String(maxRetries) + " for parameter " + String(param) + " failed");
         delay(100);  // Brief delay before retry
       }
     }
     
     if (!paramSet) {
-      SerialMon.println("Error: Failed to set parameter " + String(param) + " after 3 retries");
-      SerialMon.println();
+      DEBUG_PRINTLN("Error: Failed to set parameter " + String(param) + " after " + String(maxRetries) + " retries");
+     // SerialMon.println();
       success = false;
     }
 }
@@ -522,34 +522,6 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
   return success;
 }
 // Public: Initialize HTTP
-// bool SIM7600HTTPS::httpInit(const char* server, const char* resource) {
-//     bool success = true;
-//     // sendATHTTPTERM(success);  // Terminate any existing session
-//     // sendATHTTPINIT(success);  // Start new HTTP session
-
-//   if (paramsSet && currentResource == resource) {
-//     DEBUG_PRINTLN("Parameters already set for this resource - Skipping");
-//   } else {
-//     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
-//     sendATHTTPPARA(success, "UA", "SIM7600");
-//     sendATHTTPPARA(success, "CONTENT", "application/json");
-
-//     if (success) {
-//       paramsSet = true;
-//       currentResource = resource;  // Update state
-//       sendATHTTPTERM(success);  // Terminate on failure
-//       sendATHTTPINIT(success);  // Re-init
-//     } else {
-//       paramsSet = false;  // Reset on failure
-//       sendATHTTPTERM(success);  // Terminate on failure
-//       sendATHTTPINIT(success);  // Re-init
-//       delay(500);
-//     }
-//   }
-
-//     return success;
-// }
-// Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
 
@@ -566,13 +538,14 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method
 
   // Set params only if resource changed
   if (paramsSet && currentResource == resource) {
-    SerialMon.println("Parameters already set - Skipping");
+    DEBUG_PRINTLN("Parameters already set - Skipping");
   } else {
-    sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
+     int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 3 : 1;  // 1 retry for dummy (empty resource)
+    sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
     if (success) {
-      sendATHTTPPARA(success, "UA", "SIM7600");
+     // sendATHTTPPARA(success, "UA", "SIM7600", 3 );
       if (method == 1) {  // POST/PUT: Set CONTENT only if method requires body
-        sendATHTTPPARA(success, "CONTENT", "application/json");
+        sendATHTTPPARA(success, "CONTENT", "application/json", 3 );
       }
       if (success) {
         paramsSet = true;
@@ -584,11 +557,9 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method
     }
   }
 
-#ifndef DumpAtCommands
   if (success) {
-    SerialMon.println("HTTP setup complete");
+    DEBUG_PRINTLN("HTTP setup complete");
   }
-#endif
   return success;
 }
 //Public: Perform HTTP GET
