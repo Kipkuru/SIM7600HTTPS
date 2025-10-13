@@ -1,5 +1,4 @@
 #include <SIM7600HTTPS.h>  // Library for HTTP GET and POST with SIM7600 module
-
 #define SerialAT Serial1        // Serial port for SIM7600 communication (Serial1 for Arduino Mega)
 const char* apn = "safaricom";  // APN for GPRS connection (e.g., "safaricom" for Safaricom network)
 

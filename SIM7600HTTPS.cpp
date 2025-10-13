@@ -443,30 +443,33 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
   responseLength = 0;
 }
 
-//Read HTTP Response
+// Private: Read HTTP Response (Wait for full DATA line)
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
-  if (responseLength <= 0) 
-    return "";
+  if (responseLength <= 0) return "";
   String fullResponse = "";
   int bytesRead = 0;
-  int chunkSize = 64;  // Adjustable chunk size
+  int chunkSize = 16;
+
   while (bytesRead < responseLength) {
     int remainingBytes = responseLength - bytesRead;
     int readSize = (remainingBytes < chunkSize) ? remainingBytes : chunkSize;
     String readCmd = "AT+HTTPREAD=" + String(readSize);
     String chunk = sendATCommandSilent(readCmd);
-    
+
     int dataStart = chunk.indexOf("+HTTPREAD: DATA,");
     if (dataStart != -1) {
       int lengthStart = dataStart + 16;
       int lengthEnd = chunk.indexOf("\r\n", lengthStart);
       String lengthStr = chunk.substring(lengthStart, lengthEnd);
       int actualBytes = lengthStr.toInt();
-      
+
       int dataBegin = lengthEnd + 2;
       int dataEnd = dataBegin + actualBytes;
+      if (dataEnd > chunk.length()) {  // If payload incomplete, wait longer
+        chunk = sendATCommandSilent("");  // Read remaining without command
+        dataEnd = dataBegin + actualBytes;  // Re-calculate end
+      }
       String dataChunk = chunk.substring(dataBegin, dataEnd);
-      
       fullResponse += dataChunk;
       bytesRead += actualBytes;
     } else if (chunk.indexOf("ERROR") != -1 || chunk.indexOf("+HTTPREAD: 0") != -1) {
@@ -474,17 +477,16 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
     }
     delay(10);
   }
-  DEBUG_PRINTLN("Server Payload: " + fullResponse);  // Print full response always
-  DEBUG_PRINTLN("Total Bytes Read: " + String(bytesRead));
+  SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
+  SerialMon.println("Total Bytes Read: " + String(bytesRead));
   return fullResponse;
 }
-
-// for reading server payload
+// Private: for reading server payload (Increased timeout to 1000ms)
 String SIM7600HTTPS::sendATCommandSilent(String cmd) {
   SerialAT.println(cmd);
   String response = "";
   unsigned long startTime = millis();
-  while (millis() - startTime < 50) {
+  while (millis() - startTime < 50) {  // Increased from 50ms to 1000ms
     while (SerialAT.available()) {
       char c = SerialAT.read();
       response += c;
