@@ -373,7 +373,6 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
 }
 
 //Private: Send AT+HTTPDATA
-//Private: Send AT+HTTPDATA
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
     String cmd = "AT+HTTPDATA=" + String(strlen(data)) + ",10000";
@@ -526,7 +525,7 @@ bool SIM7600HTTPS::init() {
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
-  sendATCommand("AT+CUSBPIDSWITCH?", "OK", 1000);
+  sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
 return success;
 }
 
