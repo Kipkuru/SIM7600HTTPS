@@ -373,12 +373,20 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
 }
 
 //Private: Send AT+HTTPDATA
+//Private: Send AT+HTTPDATA
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
     String cmd = "AT+HTTPDATA=" + String(strlen(data)) + ",10000";
     String response = sendATCommand(cmd.c_str(), "DOWNLOAD", 5000);
     if (response.indexOf("DOWNLOAD") != -1) {
-      SerialAT.println(data);
+      // Chunk data sending (64 bytes per chunk)
+      int dataLen = strlen(data);
+      int chunkSize = 64;
+      for (int i = 0; i < dataLen; i += chunkSize) {
+        int chunkEnd = i + chunkSize;
+        if (chunkEnd > dataLen) chunkEnd = dataLen;
+        SerialAT.write(data + i, chunkEnd - i);  // Use write for buffer + length
+      }
       response = waitForResponse("OK", 3000);  // Wait for OK after data
       if (response.indexOf("OK") == -1) {
         SerialMon.println("Error: Failed to send HTTP data");
@@ -448,12 +456,16 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
   if (responseLength <= 0) return "";
   String fullResponse = "";
   int bytesRead = 0;
-  int chunkSize = 16;
+  int chunkSize = 64;
 
   while (bytesRead < responseLength) {
     int remainingBytes = responseLength - bytesRead;
     int readSize = (remainingBytes < chunkSize) ? remainingBytes : chunkSize;
     String readCmd = "AT+HTTPREAD=" + String(readSize);
+
+    // DEBUG_PRINT("HTTP Read Command: ");
+    // DEBUG_PRINTLN(readCmd);
+
     String chunk = sendATCommandSilent(readCmd);
 
     int dataStart = chunk.indexOf("+HTTPREAD: DATA,");
@@ -472,10 +484,16 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
       String dataChunk = chunk.substring(dataBegin, dataEnd);
       fullResponse += dataChunk;
       bytesRead += actualBytes;
+
+      // DEBUG_PRINT("Received Chunk: ");
+      // DEBUG_PRINTLN(dataChunk); 
+      // DEBUG_PRINT("Total Bytes Read: ");
+      // DEBUG_PRINTLN(bytesRead);
+
     } else if (chunk.indexOf("ERROR") != -1 || chunk.indexOf("+HTTPREAD: 0") != -1) {
       break;
     }
-    delay(10);
+    delay(1);
   }
   SerialMon.println("Server Payload: " + fullResponse);  // Print full response always
   SerialMon.println("Total Bytes Read: " + String(bytesRead));
@@ -484,6 +502,8 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
 // Private: for reading server payload (Increased timeout to 1000ms)
 String SIM7600HTTPS::sendATCommandSilent(String cmd) {
   SerialAT.println(cmd);
+  // DEBUG_PRINT("Silent Command: ");
+  // DEBUG_PRINTLN(cmd);
   String response = "";
   unsigned long startTime = millis();
   while (millis() - startTime < 50) {  // Increased from 50ms to 1000ms
@@ -491,8 +511,10 @@ String SIM7600HTTPS::sendATCommandSilent(String cmd) {
       char c = SerialAT.read();
       response += c;
     }
-    delay(10);
+    delay(1);
   }
+  // DEBUG_PRINT("Silent Response: ");
+  // DEBUG_PRINTLN(response);
   return response;
 }
 
@@ -504,6 +526,7 @@ bool SIM7600HTTPS::init() {
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
+  sendATCommand("AT+CUSBPIDSWITCH?", "OK", 1000);
 return success;
 }
 
