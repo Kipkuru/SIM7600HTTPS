@@ -372,30 +372,171 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
     }
 }
 
-//Private: Send AT+HTTPDATA
+// //Private: Send AT+HTTPDATA
+// void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
+//     if (!success) return;
+//     String cmd = "AT+HTTPDATA=" + String(strlen(data)) + ",10000";
+//     String response = sendATCommand(cmd.c_str(), "DOWNLOAD", 10000);
+//     if (response.indexOf("DOWNLOAD") != -1) {
+//       // Chunk data sending (64 bytes per chunk)
+//       int dataLen = strlen(data);
+//       int chunkSize = 64;
+//       for (int i = 0; i < dataLen; i += chunkSize) {
+//         int chunkEnd = i + chunkSize;
+//         if (chunkEnd > dataLen) chunkEnd = dataLen;
+//         SerialAT.write(data + i, chunkEnd - i);  // Use write for buffer + length
+//       }
+//       response = waitForResponse("OK", 3000);  // Wait for OK after data
+//       if (response.indexOf("OK") == -1) {
+//         SerialMon.println("Error: Failed to send HTTP data");
+//         success = false;
+//       }
+//     } else {
+//       SerialMon.println("Error: Failed to initiate HTTP data");
+//       success = false;
+//     }
+//   }
+
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
-    String cmd = "AT+HTTPDATA=" + String(strlen(data)) + ",10000";
-    String response = sendATCommand(cmd.c_str(), "DOWNLOAD", 5000);
-    if (response.indexOf("DOWNLOAD") != -1) {
-      // Chunk data sending (64 bytes per chunk)
-      int dataLen = strlen(data);
-      int chunkSize = 64;
-      for (int i = 0; i < dataLen; i += chunkSize) {
-        int chunkEnd = i + chunkSize;
-        if (chunkEnd > dataLen) chunkEnd = dataLen;
-        SerialAT.write(data + i, chunkEnd - i);  // Use write for buffer + length
-      }
-      response = waitForResponse("OK", 3000);  // Wait for OK after data
-      if (response.indexOf("OK") == -1) {
-        SerialMon.println("Error: Failed to send HTTP data");
+
+    size_t dataLen = strlen(data);
+    if (dataLen == 0) {
         success = false;
-      }
-    } else {
-      SerialMon.println("Error: Failed to initiate HTTP data");
-      success = false;
+        return;
     }
-  }
+
+    // Step 1: Send AT+HTTPDATA=<len>,10000
+    String cmd = "AT+HTTPDATA=" + String(dataLen) + ",10000";
+    SerialAT.println(cmd);
+    
+    DEBUG_PRINT("→ HTTPDATA cmd: ");
+    DEBUG_PRINTLN(cmd);
+
+    // Wait for DOWNLOAD prompt
+    String rsp = "";
+    unsigned long t0 = millis();
+    while (millis() - t0 < 10000) {
+        while (SerialAT.available()) {
+            char c = SerialAT.read();
+            rsp += c;
+            if (rsp.indexOf("DOWNLOAD") != -1) goto prompt_received;
+            DEBUG_PRINT(c);
+        }
+        delay(1);
+    }
+    SerialMon.println("Timeout waiting for DOWNLOAD");
+    success = false;
+    return;
+
+prompt_received:
+    DEBUG_PRINTLN("\n← DOWNLOAD received");
+
+    // Step 2: Send body in chunks
+    const int CHUNK = 128;          // safe value for most modules
+    size_t sent = 0;
+
+    while (sent < dataLen) {
+        size_t toSend = min(CHUNK, dataLen - sent);
+        SerialAT.write(data + sent, toSend);
+        sent += toSend;
+        
+        DEBUG_PRINT("→ sent ");
+        DEBUG_PRINT(toSend);
+        DEBUG_PRINTLN(" bytes");
+        delay(2);  // very small breathing room – adjust or remove if stable
+    }
+
+    // Step 3: Wait for final OK
+    rsp = "";
+    t0 = millis();
+    while (millis() - t0 < 8000) {   // generous timeout for large payloads
+        while (SerialAT.available()) {
+            char c = SerialAT.read();
+            rsp += c;
+            if (rsp.indexOf("OK") != -1) goto ok_received;
+            DEBUG_PRINTLN(c);
+        }
+        delay(1);
+    }
+
+    SerialMon.println("Timeout waiting for OK after data");
+    success = false;
+    return;
+
+ok_received:
+    DEBUG_PRINTLN("\n← OK after data");
+    success = true;
+}
+
+// void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
+//   if (!success) return;
+
+//   String cmd = "AT+HTTPACTION=" + String(method);
+//   SerialAT.println(cmd);
+// #ifdef DumpAtCommands
+//   SerialMon.print("Command: ");
+//   SerialMon.println(cmd);
+// #endif
+
+//   const int MAX_ATTEMPTS = 2;
+//   const unsigned long timeouts_ms[] = {30000, 30000};  // Attempt 1: 12s, Attempt 2: 25s
+
+//   for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+//     String response = "";
+//     String expectedStart = "+HTTPACTION: " + String(method) + ",";
+//     unsigned long startTime = millis();
+//     unsigned long currentTimeout = timeouts_ms[attempt];
+
+//     DEBUG_PRINTLN("HTTPACTION attempt " + String(attempt + 1) + " (timeout " + String(currentTimeout/1000) + "s)");
+
+//     while (millis() - startTime < currentTimeout) {
+//       while (SerialAT.available()) {
+//         char c = SerialAT.read();
+//         response += c;
+//         if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
+
+//           DEBUG_PRINTLN("Response: ");
+//           DEBUG_PRINT(response);
+
+//           int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
+//           int statusEnd = response.indexOf(",", statusStart);
+//           String statusStr = response.substring(statusStart, statusEnd);
+//           int status = statusStr.toInt();
+
+//           int lengthStart = statusEnd + 1;
+//           int lengthEnd = response.indexOf("\r\n", lengthStart);
+//           String lengthStr = response.substring(lengthStart, lengthEnd);
+//           responseLength = lengthStr.toInt();
+
+//           if (method == 0) {
+//             SerialMon.println("GET code: " + String(status) + ", Payload Length: " + String(responseLength));
+//           } else if (method == 1) {
+//             SerialMon.println("POST code: " + String(status));
+//           }
+
+//           if (responseLength < 0) {
+//             SerialMon.println("Error: Invalid HTTP action response length");
+//             success = false;
+//           } else {
+//             success = (status >= 200 && status < 300);
+//             if (!success) {
+//               SerialMon.println("HTTP action failed with status: " + String(status));
+//             }
+//           }
+//           return;  // Done - success or not
+//         }
+//       }
+//       delay(10);
+//     }
+
+//     DEBUG_PRINTLN("Attempt " + String(attempt + 1) + " timed out");
+//   }
+
+//   SerialMon.println("Error: HTTP action failed after all attempts");
+//   success = false;
+//   responseLength = 0;
+// }
 
 void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
   if (!success) return;
@@ -410,7 +551,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
   String response = "";
   String expectedStart = "+HTTPACTION: " + String(method) + ",";
   unsigned long startTime = millis();
-  while (millis() - startTime < 5000) {  // 60-second timeout
+  while (millis() - startTime < 30000) {  // 60-second timeout
     while (SerialAT.available()) {
       char c = SerialAT.read();
       response += c;
@@ -525,7 +666,7 @@ bool SIM7600HTTPS::init() {
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
-  sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
+ // sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
 return success;
 }
 

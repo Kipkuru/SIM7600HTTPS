@@ -12,7 +12,7 @@
 #ifndef SerialAT
   #define SerialAT Serial1  // Default SIM7600 serial
 #endif
-// //If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
+//If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
 // #ifndef DumpAtCommands
 //   #define DumpAtCommands 1
 // #endif
