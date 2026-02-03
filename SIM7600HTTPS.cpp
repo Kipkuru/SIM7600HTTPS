@@ -445,121 +445,6 @@ ok_received:
 }
 
 
-void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
-  if (!success) return;
-
-  // Send command silently
-  String cmd = "AT+HTTPACTION=" + String(method);
-  SerialAT.println(cmd);
-#ifdef DumpAtCommands
-  SerialMon.print("Command: ");
-  SerialMon.println(cmd);
-#endif
-
-  String response = "";
-  String expectedStart = "+HTTPACTION: " + String(method) + ",";
-  unsigned long startTime = millis();
-  bool retryDone = false;  // Flag to allow only one retry
-
-retry_label:
-  while (millis() - startTime < 40000) {  // 40-second timeout per attempt
-    while (SerialAT.available()) {
-      char c = SerialAT.read();
-      response += c;
-      if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
-#ifdef DumpAtCommands
-        SerialMon.println("Response: ");
-        SerialMon.print(response);
-#endif
-
-        // Parse status
-        int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
-        int statusEnd = response.indexOf(",", statusStart);
-        String statusStr = response.substring(statusStart, statusEnd);
-        int httpStatus = statusStr.toInt();
-
-        // Parse length
-        int lengthStart = statusEnd + 1;
-        int lengthEnd = response.indexOf("\r\n", lengthStart);
-        String lengthStr = response.substring(lengthStart, lengthEnd);
-        responseLength = lengthStr.toInt();
-
-        // Log
-        if (method == 0) {
-          SerialMon.println("GET code: " + String(httpStatus) + ", Payload Length: " + String(responseLength));
-        } else if (method == 1) {
-          SerialMon.println("POST code: " + String(httpStatus));
-        }
-
-        // Handle special errors
-        if (httpStatus == 404 || httpStatus == 714 || httpStatus == 720) {
-          SerialMon.println("Detected error " + String(httpStatus) + " - Recovering");
-
-          if (httpStatus == 404) {
-            // 404: Just retry HTTP once
-            SerialMon.println("404 - Retrying HTTP action once");
-          } else {
-            // 714 or 720: Reinitialize GPRS first
-            SerialMon.println("Network error (" + String(httpStatus) + ") - Reinitializing GPRS");
-            gprsConnect("safaricom");  // Use your APN
-            delay(2000);  // Give GPRS time to stabilize
-          }
-
-          // Common recovery: Terminate and re-init HTTP session
-          sendATHTTPTERM(success);
-          if (!success) {
-            SerialMon.println("Failed to terminate HTTP session");
-            success = false;
-            return;
-          }
-          sendATHTTPINIT(success);
-          delay(500);
-          if (!success) {
-            SerialMon.println("Failed to re-init HTTP session");
-            success = false;
-            return;
-          }
-
-          // Retry the action only once
-          if (!retryDone) {
-            retryDone = true;
-            response = "";  // Clear old response
-            startTime = millis();  // Reset timer
-            SerialAT.println(cmd);  // Re-send AT+HTTPACTION
-#ifdef DumpAtCommands
-            SerialMon.print("Retry Command: ");
-            SerialMon.println(cmd);
-#endif
-            goto retry_label;  // Jump back to wait loop
-          } else {
-            SerialMon.println("Retry already attempted - Giving up");
-            success = false;
-            responseLength = 0;
-            return;
-          }
-        }
-
-        // Normal success/failure
-        if (responseLength < 0) {
-          SerialMon.println("Error: Invalid HTTP action response length");
-          success = false;
-        } else {
-          success = (httpStatus >= 200 && httpStatus < 300);
-          if (!success) {
-            SerialMon.println("HTTP action failed with status: " + String(httpStatus));
-          }
-        }
-        return;  // Done
-      }
-    }
-    delay(10);
-  }
-
-  // Timeout
-  SerialMon.println("Error: HTTP action failed - Timeout");
-  success = false;
-  responseLength = 0;
-}
 // void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
 //   if (!success) return;
 
@@ -573,7 +458,7 @@ retry_label:
 //   String response = "";
 //   String expectedStart = "+HTTPACTION: " + String(method) + ",";
 //   unsigned long startTime = millis();
-//   while (millis() - startTime < 40000) {  // 60-second timeout
+//   while (millis() - startTime < 40000) {  // 40-second timeout
 //     while (SerialAT.available()) {
 //       char c = SerialAT.read();
 //       response += c;
@@ -581,37 +466,138 @@ retry_label:
 //       if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
 //         DEBUG_PRINT("Response: ");
 //         DEBUG_PRINTLN(response);
+
+//         // Parse status
 //         int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
 //         int statusEnd = response.indexOf(",", statusStart);
 //         String statusStr = response.substring(statusStart, statusEnd);
 //         int status = statusStr.toInt();
 
+//         // Parse length
 //         int lengthStart = statusEnd + 1;
 //         int lengthEnd = response.indexOf("\r\n", lengthStart);
 //         String lengthStr = response.substring(lengthStart, lengthEnd);
 //         responseLength = lengthStr.toInt();
 
-//         // Log status and length
-//         if(method == 0) {  // GET method
-//           SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
-//         } else if (method == 1) {  // POST method
+//         // Log
+//         if (method == 0) {  // GET
+//           SerialMon.println("GET code: " + String(status) + ", Payload Length: " + String(responseLength));
+//         } else if (method == 1) {  // POST
 //           SerialMon.println("POST code: " + String(status));
 //         }
-//         if (responseLength < 0) {
-//             SerialMon.println("Error: Invalid HTTP action response length");
+
+//         // Handle 404 retry (once only)
+//         if (status == 404) {
+//           SerialMon.println("404 received - Retrying HTTPACTION once");
+//           // Terminate current session
+//           sendATHTTPTERM(success);
+//           // Re-init session
+//           sendATHTTPINIT(success);
+//           delay(500);  // Allow time for re-init
+//           if (!success) {
+//             SerialMon.println("Re-init failed after 404 - Aborting");
 //             success = false;
+//             responseLength = 0;
+//             return;
 //           }
-//         return;  // Success - full response received
+
+//           // Retry the same HTTPACTION
+//           SerialAT.println(cmd);  // Resend AT+HTTPACTION=...
+//           DEBUG_PRINT("Retry Command: ");
+//           DEBUG_PRINTLN(cmd);
+
+//           // Reset response and wait again
+//           response = "";
+//           startTime = millis();
+//           continue;  // Restart the while loop to wait for new response
+//         }
+
+//         // Normal success/failure handling
+//         if (responseLength < 0) {
+//           SerialMon.println("Error: Invalid HTTP action response length");
+//           success = false;
+//         } else {
+//           success = (status >= 200 && status < 300);
+//           if (!success) {
+//             SerialMon.println("HTTP action failed with status: " + String(status));
+//           }
+//         }
+//         return;  // Done - full response received
 //       }
 //     }
 //     delay(10);
 //   }
 
 //   // Timeout or incomplete response
-//   SerialMon.println("Error: HTTP action failed");
+//   SerialMon.println("Error: HTTP action failed - Incomplete response");
 //   success = false;
 //   responseLength = 0;
 // }
+
+
+void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
+  if (!success) return;
+
+  // Send command silently
+  String cmd = "AT+HTTPACTION=" + String(method);
+  SerialAT.println(cmd);
+  DEBUG_PRINT("Command: ");
+  DEBUG_PRINTLN(cmd);
+
+  // Wait for complete response (+HTTPACTION: <method>,<status>,<length>)
+  String response = "";
+  String expectedStart = "+HTTPACTION: " + String(method) + ",";
+  unsigned long startTime = millis();
+  while (millis() - startTime < 30000) {  // 60-second timeout
+    while (SerialAT.available()) {
+      char c = SerialAT.read();
+      response += c;
+      // Check for full response (ends with newline after length)
+      if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
+        DEBUG_PRINT("Response: ");
+        DEBUG_PRINTLN(response);
+        int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
+        int statusEnd = response.indexOf(",", statusStart);
+        String statusStr = response.substring(statusStart, statusEnd);
+        int status = statusStr.toInt();
+
+        int lengthStart = statusEnd + 1;
+        int lengthEnd = response.indexOf("\r\n", lengthStart);
+        String lengthStr = response.substring(lengthStart, lengthEnd);
+        responseLength = lengthStr.toInt();
+
+        // Log status and length
+        if(method == 0) {  // GET method
+          SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
+        } else if (method == 1) {  // POST method
+          SerialMon.println("POST code: " + String(status));
+        }
+
+
+       // Handle 404 retry (once only)
+        if (status == 404) {
+          SerialMon.println("404 received - Retrying HTTPACTION once");
+          //sendATHTTPTERM(success);
+         // sendATHTTPINIT(success);
+           needsReinit = true;  // Flag for re-init next time
+        }
+
+
+        if (responseLength < 0) {
+            SerialMon.println("Error: Invalid HTTP action response length");
+            success = false;
+          }
+        return;  // Success - full response received
+      }
+    }
+    delay(10);
+  }
+
+  // Timeout or incomplete response
+  SerialMon.println("Error: HTTP action failed");
+  success = false;
+  responseLength = 0;
+}
 
 // Private: Read HTTP Response (Wait for full DATA line)
 String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
@@ -730,7 +716,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method
      int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 3 : 1;  // 1 retry for dummy (empty resource)
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
     if (success) {
-     // sendATHTTPPARA(success, "UA", "SIM7600", 3 );
+      sendATHTTPPARA(success, "UA", "SIM7600", 3 );
       if (method == 1) {  // POST/PUT: Set CONTENT only if method requires body
         sendATHTTPPARA(success, "CONTENT", "application/json", 3 );
       }
