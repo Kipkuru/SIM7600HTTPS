@@ -694,39 +694,89 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
     
   return success;
 }
+// // Public: Initialize HTTP
+// bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
+//   bool success = true;
+
+//   // Only term/init if no session or failure flagged
+//   if (!sessionActive || needsReinit) {
+//     sendATHTTPTERM(success);
+//     sendATHTTPINIT(success);
+//     delay(500);
+//     sessionActive = success;
+//     needsReinit = false;  // Reset flag
+//   }
+
+//   if (!success) return false;
+
+//   // Set params only if resource changed
+//   if (paramsSet && currentResource == resource) {
+//     DEBUG_PRINTLN("Parameters already set - Skipping");
+//   } else {
+//      int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 3 : 1;  // 1 retry for dummy (empty resource)
+//     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
+//     if (success) {
+//       sendATHTTPPARA(success, "UA", "SIM7600", 3 );
+//       if (method == 1) {  // POST/PUT: Set CONTENT only if method requires body
+//         sendATHTTPPARA(success, "CONTENT", "application/json", 3 );
+//       }
+//       if (success) {
+//         paramsSet = true;
+//         currentResource = resource;
+//       }
+//     }
+//     if (!success) {
+//       needsReinit = true;  // Flag for re-init next time
+//     }
+//   }
+
+//   if (success) {
+//     DEBUG_PRINTLN("HTTP setup complete");
+//   }
+//   return success;
+// }
+
+
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
 
-  // Only term/init if no session or failure flagged
-  if (!sessionActive || needsReinit) {
-    sendATHTTPTERM(success);
-    sendATHTTPINIT(success);
-    delay(500);
-    sessionActive = success;
-    needsReinit = false;  // Reset flag
+  // ALWAYS terminate and re-init the HTTP session at the start of every call
+  // This clears any stuck/corrupted state — critical for reliable AT+HTTPDATA / DOWNLOAD
+  sendATHTTPTERM(success);
+  sendATHTTPINIT(success);
+  delay(250);  // Give the module time to fully reset the HTTP engine
+
+  // If term/init failed, early exit
+  if (!success) {
+    SerialMon.println("HTTP session init failed — cannot proceed");
+    return false;
   }
 
-  if (!success) return false;
+  sessionActive = true;  // Mark session as active now
 
-  // Set params only if resource changed
+  // Now check if parameters need to be set (only if resource changed)
   if (paramsSet && currentResource == resource) {
-    DEBUG_PRINTLN("Parameters already set - Skipping");
+    DEBUG_PRINTLN("Parameters already set - Skipping re-setting");
   } else {
-     int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 3 : 1;  // 1 retry for dummy (empty resource)
+    // URL with 1 retry (your first-time failure pattern)
+    int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 1 : 0;  // 0 for dummy
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
+
     if (success) {
-      sendATHTTPPARA(success, "UA", "SIM7600", 3 );
-      if (method == 1) {  // POST/PUT: Set CONTENT only if method requires body
-        sendATHTTPPARA(success, "CONTENT", "application/json", 3 );
+      sendATHTTPPARA(success, "UA", "SIM7600", 3);
+      if (method == 1) {  // POST/PUT only
+        sendATHTTPPARA(success, "CONTENT", "application/json", 3);
       }
       if (success) {
         paramsSet = true;
         currentResource = resource;
       }
     }
+
     if (!success) {
-      needsReinit = true;  // Flag for re-init next time
+      needsReinit = true;  // Flag for next call to force re-term/init
+      sessionActive = false;
     }
   }
 
@@ -735,6 +785,7 @@ bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method
   }
   return success;
 }
+
 //Public: Perform HTTP GET
 bool SIM7600HTTPS::httpGet(String& response) {
     bool success = true;
