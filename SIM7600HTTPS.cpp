@@ -375,11 +375,57 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
 
-    size_t dataLen = strlen(data);
-    if (dataLen == 0) {
+    // size_t dataLen = strlen(data);
+    // if (dataLen == 0) {
+    //     success = false;
+    //     return;
+    // }
+
+    if (data == nullptr) {
+        SerialMon.println("ERROR: sendATHTTPDATA called with NULL pointer");
         success = false;
         return;
     }
+
+    size_t dataLen = strlen(data);
+    if (dataLen == 0) {
+        SerialMon.println("ERROR: Empty payload (length 0)");
+        success = false;
+        return;
+    }
+
+
+// ────────────────────────────────────────────────
+    // Debug: Show exact length and content boundaries
+    // ────────────────────────────────────────────────
+    SerialMon.print("Payload length (strlen): ");
+    SerialMon.println(dataLen);
+
+    SerialMon.print("First 30 chars: ");
+    for (size_t i = 0; i < min((size_t)30, dataLen); i++) {
+        char c = data[i];
+        if (isprint(c)) SerialMon.print(c);
+        else SerialMon.print('.');
+    }
+    SerialMon.println();
+
+    SerialMon.print("Last 30 chars: ");
+    for (size_t i = max((size_t)0, dataLen - 30); i < dataLen; i++) {
+        char c = data[i];
+        if (isprint(c)) SerialMon.print(c);
+        else SerialMon.print('.');
+    }
+    SerialMon.println();
+
+    // Optional: hex dump first & last few bytes (helps spot non-printable chars)
+    SerialMon.print("First 8 bytes hex: ");
+    for (size_t i = 0; i < min((size_t)8, dataLen); i++) {
+        SerialMon.printf("%02X ", (unsigned char)data[i]);
+    }
+    SerialMon.println();
+
+    // ────────────────────────────────────────────────
+
 
     // Step 1: Send AT+HTTPDATA=<len>,10000
     String cmd = "AT+HTTPDATA=" + String(dataLen) + ",10000";
@@ -421,6 +467,9 @@ prompt_received:
         DEBUG_PRINTLN(" bytes");
         delay(2);  // very small breathing room – adjust or remove if stable
     }
+
+    SerialAT.flush();  // ← ADD THIS HERE
+    DEBUG_PRINTLN("Flush completed — all bytes sent to UART");
 
     // Step 3: Wait for final OK
     rsp = "";
@@ -736,49 +785,97 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
 //   return success;
 // }
 
-
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
 
-  // Only do full term/init when:
-  // 1. First time, or
-  // 2. Resource actually changed, or  
-  // 3. Previous call failed (needsReinit)
-  if (!sessionActive || currentResource != resource || needsReinit) {
-    sendATHTTPTERM(success);
-    sendATHTTPINIT(success);
-    delay(500);
-    sessionActive = success;
-    needsReinit = false;
+  // ALWAYS terminate and re-initialize the HTTP session at the start of every call
+  // This is the most reliable way to avoid stuck states, DOWNLOAD/OK timeouts, etc.
+  sendATHTTPTERM(success);
+  sendATHTTPINIT(success);
+  delay(500);  // Give the module time to fully reset the HTTP engine
+
+  // Early exit if init itself failed
+  if (!success) {
+    SerialMon.println("HTTP session init failed — cannot proceed");
+    sessionActive = false;
+    return false;
   }
 
-  if (!success) return false;
+  sessionActive = true;  // Session is now active
 
-  // Always re-set parameters if resource is different (this is the key fix)
-  if (currentResource != resource) {
+  // Set parameters only if resource changed (optimization)
+  if (paramsSet && currentResource == resource) {
+    DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
+  } else {
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
     if (success) {
       sendATHTTPPARA(success, "UA", "SIM7600");
       if (method == 1) {                    // Only POST needs Content-Type
         sendATHTTPPARA(success, "CONTENT", "application/json");
       }
-      paramsSet = true;
-      currentResource = resource;           // Update current resource
+      if (success) {
+        paramsSet = true;
+        currentResource = resource;         // Update current resource
+      }
     }
-  } else {
-    DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
   }
 
   if (!success) {
-    needsReinit = true;   // Force full re-init next time
+    needsReinit = true;   // Flag for next call (though next call will re-init anyway)
+    sessionActive = false;
   }
 
   if (success) {
     DEBUG_PRINTLN("HTTP setup complete");
   }
+
   return success;
 }
+
+
+// // Public: Initialize HTTP
+// bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
+//   bool success = true;
+
+//   // Only do full term/init when:
+//   // 1. First time, or
+//   // 2. Resource actually changed, or  
+//   // 3. Previous call failed (needsReinit)
+//   if (!sessionActive || currentResource != resource || needsReinit) {
+//     sendATHTTPTERM(success);
+//     sendATHTTPINIT(success);
+//     delay(500);
+//     sessionActive = success;
+//     needsReinit = false;
+//   }
+
+//   if (!success) return false;
+
+//   // Always re-set parameters if resource is different (this is the key fix)
+//   if (currentResource != resource) {
+//     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
+//     if (success) {
+//       sendATHTTPPARA(success, "UA", "SIM7600");
+//       if (method == 1) {                    // Only POST needs Content-Type
+//         sendATHTTPPARA(success, "CONTENT", "application/json");
+//       }
+//       paramsSet = true;
+//       currentResource = resource;           // Update current resource
+//     }
+//   } else {
+//     DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
+//   }
+
+//   if (!success) {
+//     needsReinit = true;   // Force full re-init next time
+//   }
+
+//   if (success) {
+//     DEBUG_PRINTLN("HTTP setup complete");
+//   }
+//   return success;
+// }
 
 //Public: Perform HTTP GET
 bool SIM7600HTTPS::httpGet(String& response) {
