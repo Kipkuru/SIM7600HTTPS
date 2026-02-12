@@ -741,43 +741,37 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
 
-  // ALWAYS terminate and re-init the HTTP session at the start of every call
-  // This clears any stuck/corrupted state — critical for reliable AT+HTTPDATA / DOWNLOAD
-  sendATHTTPTERM(success);
-  sendATHTTPINIT(success);
-  delay(250);  // Give the module time to fully reset the HTTP engine
-
-  // If term/init failed, early exit
-  if (!success) {
-    SerialMon.println("HTTP session init failed — cannot proceed");
-    return false;
+  // Only do full term/init when:
+  // 1. First time, or
+  // 2. Resource actually changed, or  
+  // 3. Previous call failed (needsReinit)
+  if (!sessionActive || currentResource != resource || needsReinit) {
+    sendATHTTPTERM(success);
+    sendATHTTPINIT(success);
+    delay(500);
+    sessionActive = success;
+    needsReinit = false;
   }
 
-  sessionActive = true;  // Mark session as active now
+  if (!success) return false;
 
-  // Now check if parameters need to be set (only if resource changed)
-  if (paramsSet && currentResource == resource) {
-    DEBUG_PRINTLN("Parameters already set - Skipping re-setting");
-  } else {
-    // URL with 1 retry (your first-time failure pattern)
-    int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 1 : 0;  // 0 for dummy
-    sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
-
+  // Always re-set parameters if resource is different (this is the key fix)
+  if (currentResource != resource) {
+    sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
     if (success) {
-      sendATHTTPPARA(success, "UA", "SIM7600", 3);
-      if (method == 1) {  // POST/PUT only
-        sendATHTTPPARA(success, "CONTENT", "application/json", 3);
+      sendATHTTPPARA(success, "UA", "SIM7600");
+      if (method == 1) {                    // Only POST needs Content-Type
+        sendATHTTPPARA(success, "CONTENT", "application/json");
       }
-      if (success) {
-        paramsSet = true;
-        currentResource = resource;
-      }
+      paramsSet = true;
+      currentResource = resource;           // Update current resource
     }
+  } else {
+    DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
+  }
 
-    if (!success) {
-      needsReinit = true;  // Flag for next call to force re-term/init
-      sessionActive = false;
-    }
+  if (!success) {
+    needsReinit = true;   // Force full re-init next time
   }
 
   if (success) {
