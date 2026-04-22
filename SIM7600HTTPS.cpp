@@ -13,29 +13,42 @@ String SIM7600HTTPS::sendATCommand(const char* cmd, const char* expected, unsign
   return waitForResponse(expected, timeout);  // Wait for the specified response
 }
 
+
 // Private: Wait for specific response with debug handling
 String SIM7600HTTPS::waitForResponse(const char* expected, unsigned long timeout) {
   String response = "";
   unsigned long startTime = millis();
+  const int MAX_RESPONSE_LEN = 4096;  // Safety limit for large responses
+  
   while (millis() - startTime < timeout) {
     while (SerialAT.available()) {
       char c = SerialAT.read();
       response += c;
-
-      if (response.indexOf(expected) != -1 && 
-          (response.indexOf("\n") > response.indexOf(expected) || response.endsWith(expected))) {
-            DEBUG_PRINT("Response: ");  // Print on timeout           
-            DEBUG_PRINTLN(response);  // Dump raw response if defined
+      
+      // Safety: prevent runaway buffer growth
+      if (response.length() > MAX_RESPONSE_LEN) {
+        DEBUG_PRINTLN("ERROR: Response exceeded max length!");
         return response;
       }
     }
+    
+    // Only check for expected response after we have a complete line
+    // Complete line = ends with \r\n or \n
+    if ((response.endsWith("\r\n") || response.endsWith("\n")) && 
+        response.indexOf(expected) != -1) {
+      DEBUG_PRINT("Response: ");
+      DEBUG_PRINTLN(response);
+      return response;
+    }
+    
     delay(10);  // Small delay to avoid tight loop
   }
-  DEBUG_PRINT("Response: ");  // Print on timeout
-  DEBUG_PRINTLN(response);  // Dump raw response if defined
+  
+  // Timeout - return what we got
+  DEBUG_PRINT("Response (TIMEOUT): ");
+  DEBUG_PRINTLN(response);
   return response;
 }
-
 // Private: Clear SerialAT buffer
 void SIM7600HTTPS::clearSerialBuffer() {
   while (SerialAT.available()) {
@@ -119,6 +132,8 @@ void SIM7600HTTPS::sendATCSQ(bool& success) {
       }
     }
 }
+
+
 //Private: Send AT+CGREG? (Step 4 - Network Registration Check)
 void SIM7600HTTPS::sendATCGREG(bool& success) {
   if (!success) return;
@@ -135,7 +150,7 @@ void SIM7600HTTPS::sendATCGREG(bool& success) {
 //Private: Send AT+CNMP=38 (Step 5 - Set Preferred Mode to LTE)
 void SIM7600HTTPS::sendATCNMP(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CNMP=39", "OK", 1000);
+    String response = sendATCommand("AT+CNMP=38", "OK", 1000);
     if (response.indexOf("OK") == -1) {
       SerialMon.println("Error: Failed to set preferred mode to LTE");
       success = false;
@@ -162,7 +177,7 @@ void SIM7600HTTPS::sendATCOPS(bool& success) {
 //Private: Send AT+CGATT=1 (Step 7 - Attach to GPRS)
 void SIM7600HTTPS::sendATCGATT(bool& success) {
     if (!success) return;
-    String response = sendATCommand("AT+CGATT=1", "OK", 1500);
+    String response = sendATCommand("AT+CGATT=1", "OK", 2000);
     if (response.indexOf("OK") != -1) {
             DEBUG_PRINTLN("PDP context activated");
     }else{
@@ -187,7 +202,7 @@ void SIM7600HTTPS::sendATCGDCONT(bool& success, const char* apn) {
   #endif
   }
 //Private: Send AT+CGACT=1,1 (Step 9 - Activate PDP Context)
-void SIM7600HTTPS::sendATCGACT(bool& success) {
+void SIM7600HTTPS::sendCGACT(bool& success) {
     if (!success) return;
 
     // Step 1: Check current PDP context state with AT+CGACT?
@@ -375,12 +390,6 @@ void SIM7600HTTPS::sendATHTTPPARA(bool& success, const char* param, const char* 
 void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
     if (!success) return;
 
-    // size_t dataLen = strlen(data);
-    // if (dataLen == 0) {
-    //     success = false;
-    //     return;
-    // }
-
     if (data == nullptr) {
         SerialMon.println("ERROR: sendATHTTPDATA called with NULL pointer");
         success = false;
@@ -394,37 +403,8 @@ void SIM7600HTTPS::sendATHTTPDATA(bool& success, const char* data) {
         return;
     }
 
-
-// ────────────────────────────────────────────────
-    // Debug: Show exact length and content boundaries
-    // ────────────────────────────────────────────────
     SerialMon.print("Payload length (strlen): ");
     SerialMon.println(dataLen);
-
-    SerialMon.print("First 30 chars: ");
-    for (size_t i = 0; i < min((size_t)30, dataLen); i++) {
-        char c = data[i];
-        if (isprint(c)) SerialMon.print(c);
-        else SerialMon.print('.');
-    }
-    SerialMon.println();
-
-    SerialMon.print("Last 30 chars: ");
-    for (size_t i = max((size_t)0, dataLen - 30); i < dataLen; i++) {
-        char c = data[i];
-        if (isprint(c)) SerialMon.print(c);
-        else SerialMon.print('.');
-    }
-    SerialMon.println();
-
-    // Optional: hex dump first & last few bytes (helps spot non-printable chars)
-    SerialMon.print("First 8 bytes hex: ");
-    for (size_t i = 0; i < min((size_t)8, dataLen); i++) {
-        SerialMon.printf("%02X ", (unsigned char)data[i]);
-    }
-    SerialMon.println();
-
-    // ────────────────────────────────────────────────
 
 
     // Step 1: Send AT+HTTPDATA=<len>,10000
@@ -463,8 +443,8 @@ prompt_received:
         sent += toSend;
         
         DEBUG_PRINT("→ sent ");
-        DEBUG_PRINT(toSend);
-        DEBUG_PRINTLN(" bytes");
+        // DEBUG_PRINT(toSend);
+        // DEBUG_PRINTLN(" bytes");
         delay(2);  // very small breathing room – adjust or remove if stable
     }
 
@@ -479,7 +459,7 @@ prompt_received:
             char c = SerialAT.read();
             rsp += c;
             if (rsp.indexOf("OK") != -1) goto ok_received;
-            DEBUG_PRINTLN(c);
+            //DEBUG_PRINTLN(c);
         }
         delay(1);
     }
@@ -492,96 +472,6 @@ ok_received:
     DEBUG_PRINTLN("\n← OK after data");
     success = true;
 }
-
-
-// void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
-//   if (!success) return;
-
-//   // Send command silently
-//   String cmd = "AT+HTTPACTION=" + String(method);
-//   SerialAT.println(cmd);
-//   DEBUG_PRINT("Command: ");
-//   DEBUG_PRINTLN(cmd);
-
-//   // Wait for complete response (+HTTPACTION: <method>,<status>,<length>)
-//   String response = "";
-//   String expectedStart = "+HTTPACTION: " + String(method) + ",";
-//   unsigned long startTime = millis();
-//   while (millis() - startTime < 40000) {  // 40-second timeout
-//     while (SerialAT.available()) {
-//       char c = SerialAT.read();
-//       response += c;
-//       // Check for full response (ends with newline after length)
-//       if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
-//         DEBUG_PRINT("Response: ");
-//         DEBUG_PRINTLN(response);
-
-//         // Parse status
-//         int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
-//         int statusEnd = response.indexOf(",", statusStart);
-//         String statusStr = response.substring(statusStart, statusEnd);
-//         int status = statusStr.toInt();
-
-//         // Parse length
-//         int lengthStart = statusEnd + 1;
-//         int lengthEnd = response.indexOf("\r\n", lengthStart);
-//         String lengthStr = response.substring(lengthStart, lengthEnd);
-//         responseLength = lengthStr.toInt();
-
-//         // Log
-//         if (method == 0) {  // GET
-//           SerialMon.println("GET code: " + String(status) + ", Payload Length: " + String(responseLength));
-//         } else if (method == 1) {  // POST
-//           SerialMon.println("POST code: " + String(status));
-//         }
-
-//         // Handle 404 retry (once only)
-//         if (status == 404) {
-//           SerialMon.println("404 received - Retrying HTTPACTION once");
-//           // Terminate current session
-//           sendATHTTPTERM(success);
-//           // Re-init session
-//           sendATHTTPINIT(success);
-//           delay(500);  // Allow time for re-init
-//           if (!success) {
-//             SerialMon.println("Re-init failed after 404 - Aborting");
-//             success = false;
-//             responseLength = 0;
-//             return;
-//           }
-
-//           // Retry the same HTTPACTION
-//           SerialAT.println(cmd);  // Resend AT+HTTPACTION=...
-//           DEBUG_PRINT("Retry Command: ");
-//           DEBUG_PRINTLN(cmd);
-
-//           // Reset response and wait again
-//           response = "";
-//           startTime = millis();
-//           continue;  // Restart the while loop to wait for new response
-//         }
-
-//         // Normal success/failure handling
-//         if (responseLength < 0) {
-//           SerialMon.println("Error: Invalid HTTP action response length");
-//           success = false;
-//         } else {
-//           success = (status >= 200 && status < 300);
-//           if (!success) {
-//             SerialMon.println("HTTP action failed with status: " + String(status));
-//           }
-//         }
-//         return;  // Done - full response received
-//       }
-//     }
-//     delay(10);
-//   }
-
-//   // Timeout or incomplete response
-//   SerialMon.println("Error: HTTP action failed - Incomplete response");
-//   success = false;
-//   responseLength = 0;
-// }
 
 
 void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
@@ -597,7 +487,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
   String response = "";
   String expectedStart = "+HTTPACTION: " + String(method) + ",";
   unsigned long startTime = millis();
-  while (millis() - startTime < 30000) {  // 60-second timeout
+  while (millis() - startTime < 10000) {  // 60-second timeout
     while (SerialAT.available()) {
       char c = SerialAT.read();
       response += c;
@@ -620,15 +510,6 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
           SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
         } else if (method == 1) {  // POST method
           SerialMon.println("POST code: " + String(status));
-        }
-
-
-       // Handle 404 retry (once only)
-        if (status == 404) {
-          SerialMon.println("404 received - Retrying HTTPACTION once");
-          //sendATHTTPTERM(success);
-         // sendATHTTPINIT(success);
-           needsReinit = true;  // Flag for re-init next time
         }
 
 
@@ -682,10 +563,10 @@ String SIM7600HTTPS::readHTTPResponse(int responseLength, int timeout) {
       fullResponse += dataChunk;
       bytesRead += actualBytes;
 
-      // DEBUG_PRINT("Received Chunk: ");
-      // DEBUG_PRINTLN(dataChunk); 
-      // DEBUG_PRINT("Total Bytes Read: ");
-      // DEBUG_PRINTLN(bytesRead);
+      DEBUG_PRINT("Received Chunk: ");
+      DEBUG_PRINTLN(dataChunk); 
+      DEBUG_PRINT("Total Bytes Read: ");
+      DEBUG_PRINTLN(bytesRead);
 
     } else if (chunk.indexOf("ERROR") != -1 || chunk.indexOf("+HTTPREAD: 0") != -1) {
       break;
@@ -723,7 +604,8 @@ bool SIM7600HTTPS::init() {
   sendAT(success);      // Step 1: Check basic communication
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
- // sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
+  sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
+  sendATCommand("ATE0", "OK", 500);
 return success;
 }
 
@@ -732,150 +614,64 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
     bool success = true;
     
     sendATCNMP(success);    // Step 4: Set LTE mode first
-   //sendATCOPS(success);    // Step 5: Operator selection- keeps destabilizing the GSM board
+
     sendATCGREG(success);   // Step 6: Confirm registration
+
     sendATCGATT(success);   // Step 7: Attach GPRS
     sendATCGDCONT(success, apn);  // Step 8 with variable APN: Define PDP context
     //delay(1000); for testing purposes
-    sendATCGACT(success);   // Step 9: Activate PDP context
+    sendCGACT(success);   // Step 9: Activate PDP context
+    sendATCGATT(success);
    // delay(1000);for testing purposes
     sendATCGPADDR(success); // Step 10: Get IP
     
   return success;
 }
-// // Public: Initialize HTTP
-// bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
-//   bool success = true;
 
-//   // Only term/init if no session or failure flagged
-//   if (!sessionActive || needsReinit) {
-//     sendATHTTPTERM(success);
-//     sendATHTTPINIT(success);
-//     delay(500);
-//     sessionActive = success;
-//     needsReinit = false;  // Reset flag
-//   }
 
-//   if (!success) return false;
-
-//   // Set params only if resource changed
-//   if (paramsSet && currentResource == resource) {
-//     DEBUG_PRINTLN("Parameters already set - Skipping");
-//   } else {
-//      int urlRetries = (resource != nullptr && strlen(resource) > 0) ? 3 : 1;  // 1 retry for dummy (empty resource)
-//     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str(), urlRetries);
-//     if (success) {
-//       sendATHTTPPARA(success, "UA", "SIM7600", 3 );
-//       if (method == 1) {  // POST/PUT: Set CONTENT only if method requires body
-//         sendATHTTPPARA(success, "CONTENT", "application/json", 3 );
-//       }
-//       if (success) {
-//         paramsSet = true;
-//         currentResource = resource;
-//       }
-//     }
-//     if (!success) {
-//       needsReinit = true;  // Flag for re-init next time
-//     }
-//   }
-
-//   if (success) {
-//     DEBUG_PRINTLN("HTTP setup complete");
-//   }
-//   return success;
-// }
 
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
 
-  // ALWAYS terminate and re-initialize the HTTP session at the start of every call
-  // This is the most reliable way to avoid stuck states, DOWNLOAD/OK timeouts, etc.
-  sendATHTTPTERM(success);
-  sendATHTTPINIT(success);
-  delay(500);  // Give the module time to fully reset the HTTP engine
-
-  // Early exit if init itself failed
-  if (!success) {
-    SerialMon.println("HTTP session init failed — cannot proceed");
-    sessionActive = false;
-    return false;
+  // Only do full term/init when:
+  // 1. First time, or
+  // 2. Resource actually changed, or  
+  // 3. Previous call failed (needsReinit)
+  if (!sessionActive || currentResource != resource || needsReinit) {
+    sendATHTTPTERM(success);
+    sendATHTTPINIT(success);
+    delay(100);
+    sessionActive = success;
+    needsReinit = false;
   }
 
-  sessionActive = true;  // Session is now active
+  if (!success) return false;
 
-  // Set parameters only if resource changed (optimization)
-  if (paramsSet && currentResource == resource) {
-    DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
-  } else {
+  // Always re-set parameters if resource is different (this is the key fix)
+  if (currentResource != resource) {
     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
     if (success) {
       sendATHTTPPARA(success, "UA", "SIM7600");
       if (method == 1) {                    // Only POST needs Content-Type
         sendATHTTPPARA(success, "CONTENT", "application/json");
       }
-      if (success) {
-        paramsSet = true;
-        currentResource = resource;         // Update current resource
-      }
+      paramsSet = true;
+      currentResource = resource;           // Update current resource
     }
+  } else {
+    DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
   }
 
   if (!success) {
-    needsReinit = true;   // Flag for next call (though next call will re-init anyway)
-    sessionActive = false;
+    needsReinit = true;   // Force full re-init next time
   }
 
   if (success) {
     DEBUG_PRINTLN("HTTP setup complete");
   }
-
   return success;
 }
-
-
-// // Public: Initialize HTTP
-// bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
-//   bool success = true;
-
-//   // Only do full term/init when:
-//   // 1. First time, or
-//   // 2. Resource actually changed, or  
-//   // 3. Previous call failed (needsReinit)
-//   if (!sessionActive || currentResource != resource || needsReinit) {
-//     sendATHTTPTERM(success);
-//     sendATHTTPINIT(success);
-//     delay(500);
-//     sessionActive = success;
-//     needsReinit = false;
-//   }
-
-//   if (!success) return false;
-
-//   // Always re-set parameters if resource is different (this is the key fix)
-//   if (currentResource != resource) {
-//     sendATHTTPPARA(success, "URL", (String(server) + String(resource)).c_str());
-//     if (success) {
-//       sendATHTTPPARA(success, "UA", "SIM7600");
-//       if (method == 1) {                    // Only POST needs Content-Type
-//         sendATHTTPPARA(success, "CONTENT", "application/json");
-//       }
-//       paramsSet = true;
-//       currentResource = resource;           // Update current resource
-//     }
-//   } else {
-//     DEBUG_PRINTLN("Same resource - skipping parameter re-setting");
-//   }
-
-//   if (!success) {
-//     needsReinit = true;   // Force full re-init next time
-//   }
-
-//   if (success) {
-//     DEBUG_PRINTLN("HTTP setup complete");
-//   }
-//   return success;
-// }
 
 //Public: Perform HTTP GET
 bool SIM7600HTTPS::httpGet(String& response) {

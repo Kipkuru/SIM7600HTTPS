@@ -1,10 +1,11 @@
 #include <SIM7600HTTPS.h>  // Library for HTTP GET and POST with SIM7600 module
 #define SerialAT Serial1        // Serial port for SIM7600 communication (Serial1 for Arduino Mega)
-const char* apn = "safaricom";  // APN for GPRS connection (e.g., "safaricom" for Safaricom network)
+const char* apn = "saf";  // APN for GPRS connection (e.g., "safaricom" for Safaricom network)
 
-const char* server = "https://voyager.mazimobility.com/inventory-management-service";                                                    // Public HTTPS endpoint for testing
-const char* resourceGet = "/api/v1/charging-station-mail/3/latest";                                                                      // GET endpoint to retrieve a sample post
-const char* resourcePost = "/api/v1/charging-stations-status";                                                                           // POST endpoint to submit data
+const char* server = "https://mazimobility.com/";
+const char* resourceGet = "/api/get";
+const char* resourcePost = "/api/post";
+                                                                         // POST endpoint to submit data
 const char* postData = "{\"title\":\"Generic Test Post\",\"body\":\"This is a generic post for testing API endpoints.\",\"userId\":1}";  // Generic JSON data for POST
 unsigned long previousMillis = 0;                                                                                                        // Tracks last request time
 const long interval = 10000;                                                                                                             // Interval for HTTP requests (10 seconds)

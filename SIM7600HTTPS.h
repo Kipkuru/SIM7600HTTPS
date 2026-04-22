@@ -56,12 +56,13 @@ private:
   void checkCPINStatus(String response);
   void sendATCSQ(bool& success);
   //gprsconnect AT commands
+void sendATCEREG(bool &success);
   void sendATCGREG(bool& success);
   void sendATCNMP(bool& success);
   void sendATCOPS(bool& success);
   void sendATCGATT(bool& success);
   void sendATCGDCONT(bool& success, const char* apn);
-  void sendATCGACT(bool& success);
+  void sendCGACT(bool& success);
   void sendATCGPADDR(bool& success);
   //https AT commands
   void sendATHTTPTERM(bool& success);
