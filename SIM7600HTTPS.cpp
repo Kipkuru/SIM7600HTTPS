@@ -605,8 +605,7 @@ bool SIM7600HTTPS::init() {
   sendATCPIN(success);  // Step 2: Check SIM status
   sendATCSQ(success);   // Step 3: Check signal quality
   sendATCommand("AT+CUSBPIDSWITCH=9001,1,1", "OK", 1000);
-  sendATCommand("ATE0", "OK", 500);
-return success;
+  return success;
 }
 
 // Public: Connect to GPRS (Steps 4-10)
@@ -633,7 +632,7 @@ bool SIM7600HTTPS::gprsConnect(const char* apn) {
 // Public: Initialize HTTP
 bool SIM7600HTTPS::httpInit(const char* server, const char* resource, int method) {
   bool success = true;
-
+   sendATCommand("ATE0", "OK", 500);
   // Only do full term/init when:
   // 1. First time, or
   // 2. Resource actually changed, or  
