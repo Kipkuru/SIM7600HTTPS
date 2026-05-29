@@ -5,6 +5,7 @@
 // Notes:
 // - Requires SerialMon and SerialAT to be defined in the .ino (e.g., #define SerialMon Serial, #define SerialAT Serial1)
 
+
 // Define serial ports if not already defined in .ino
 #ifndef SerialMon
   #define SerialMon Serial  // Default debug serial
@@ -13,9 +14,9 @@
   #define SerialAT Serial1  // Default SIM7600 serial
 #endif
 //If DumpAtCommands is not defined by the sketch, default it to 0 (disabled)
-// #ifndef DumpAtCommands
-//   #define DumpAtCommands 1
-// #endif
+#ifndef DumpAtCommands
+  #define DumpAtCommands 0
+#endif
 
 #if DumpAtCommands 
   #define DEBUG_PRINT(x)    Serial.print(x)
