@@ -524,7 +524,7 @@ void SIM7600HTTPS::sendATHTTPDATA(bool &success, const char *data)
   // Wait for DOWNLOAD prompt
   String rsp = "";
   unsigned long t0 = millis();
-  while (millis() - t0 < 15000)
+  while (millis() - t0 < 10000)
   {
     while (SerialAT.available())
     {
@@ -552,11 +552,6 @@ prompt_received:
     size_t toSend = min(CHUNK, dataLen - sent);
     SerialAT.write(data + sent, toSend);
     sent += toSend;
-
-    // DEBUG_PRINT("→ sent ");
-    //  DEBUG_PRINT(toSend);
-    //  DEBUG_PRINTLN(" bytes");
-    // delay(2);  // very small breathing room – adjust or remove if stable
   }
 
   SerialAT.flush(); // ← ADD THIS HERE
@@ -573,7 +568,6 @@ prompt_received:
       rsp += c;
       if (rsp.indexOf("OK") != -1)
         goto ok_received;
-      // DEBUG_PRINTLN(c);
     }
     delay(1);
   }
@@ -588,88 +582,67 @@ ok_received:
 }
 
 void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
-    if (!success) return;
+  if (!success) return;
 
-    clearSerialBuffer();  // Flush any stale data
+    clearSerialBuffer(); // Flush any stale RX data
 
-    String cmd = "AT+HTTPACTION=" + String(method);
-    SerialAT.println(cmd);
-    DEBUG_PRINT("Command: ");
-    DEBUG_PRINTLN(cmd);
+  // Send command silently
+    unsigned long cmdSentAt = millis(); // ← stamp exactly when command left
+  String cmd = "AT+HTTPACTION=" + String(method);
+  SerialAT.println(cmd);
+  DEBUG_PRINT("Command: ");
+  DEBUG_PRINTLN(cmd);
 
-    String response = "";
-    String expectedStart = "+HTTPACTION: " + String(method) + ",";
-    unsigned long startTime = millis();
-    bool responseFound = false;
-    
-    while (millis() - startTime < 30000) {  // 30-second timeout
-        while (SerialAT.available()) {
-            char c = SerialAT.read();
-            response += c;
-            
-            // Prevent buffer bloat — keep only last 512 chars if we exceed 1024
-            if (response.length() > 1024) {
-                response = response.substring(response.length() - 512);
-            }
-            
-            // Look for complete line: +HTTPACTION: method,status,length\r\n
-            int startIdx = response.indexOf(expectedStart);
-            if (startIdx != -1) {
-                // Search for end of line AFTER the expected start
-                int endIdx = response.indexOf("\r\n", startIdx + expectedStart.length());
-                if (endIdx != -1) {
-                    // Extract just the complete line
-                    String completeLine = response.substring(startIdx, endIdx);
-                    DEBUG_PRINT("Response: ");
-                    DEBUG_PRINTLN(completeLine);
-                    
-                    // Parse: +HTTPACTION: 1,200,2
-                    // Find the two commas
-                    int comma1Idx = completeLine.indexOf(",");
-                    int comma2Idx = completeLine.indexOf(",", comma1Idx + 1);
-                    
-                    if (comma1Idx != -1 && comma2Idx != -1) {
-                        // Extract status and length
-                        String statusStr = completeLine.substring(comma1Idx + 1, comma2Idx);
-                        String lengthStr = completeLine.substring(comma2Idx + 1);
-                        
-                        // Trim whitespace
-                        statusStr.trim();
-                        lengthStr.trim();
-                        
-                        int status = statusStr.toInt();
-                        responseLength = lengthStr.toInt();
-                        
-                        // Log based on method
-                        if (method == 0) {  // GET
-                            SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
-                        } else if (method == 1) {  // POST
-                            SerialMon.println("POST code: " + String(status));
-                        }
-                        
-                        // Validate response length
-                        if (responseLength < 0) {
-                            SerialMon.println("Error: Invalid HTTP action response length");
-                            success = false;
-                        }
-                        return;  // Success — exit immediately
-                    } else {
-                        // Line doesn't have two commas — something is wrong
-                        DEBUG_PRINTLN("ERROR: Response line malformed (missing commas)");
-                        DEBUG_PRINTLN(completeLine);
-                    }
-                }
-            }
+  // Wait for complete response (+HTTPACTION: <method>,<status>,<length>)
+  String response = "";
+  String expectedStart = "+HTTPACTION: " + String(method) + ",";
+  unsigned long startTime = millis();
+  unsigned long timeoutMs = (method == 0) ? 12500UL : 15000UL;  
+  // GET = 10s, POST = 15s
+
+  while (millis() - startTime < timeoutMs) {  // 60-second timeout
+    while (SerialAT.available()) {
+      char c = SerialAT.read();
+      response += c;
+      // Check for full response (ends with newline after length)
+      if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
+        DEBUG_PRINT("Response: ");
+        DEBUG_PRINTLN(response);
+        int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
+        int statusEnd = response.indexOf(",", statusStart);
+        String statusStr = response.substring(statusStart, statusEnd);
+        int status = statusStr.toInt();
+
+        int lengthStart = statusEnd + 1;
+        int lengthEnd = response.indexOf("\r\n", lengthStart);
+        String lengthStr = response.substring(lengthStart, lengthEnd);
+        responseLength = lengthStr.toInt();
+
+        // Log status and length
+        if(method == 0) {  // GET method
+          SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
+        } else if (method == 1) {  // POST method
+          SerialMon.println("POST code: " + String(status));
         }
-        delay(10);
-    }
 
-    // Timeout occurred
-    SerialMon.println("Error: HTTP Paction timeout action failed");
-    DEBUG_PRINT("DEBUG: Response buffer at timeout: ");
-    DEBUG_PRINTLN(response);  // ← Log what we actually got
-    success = false;
-    responseLength = 0;
+
+        if (responseLength < 0) {
+            SerialMon.println("Error: Invalid HTTP action response length");
+            success = false;
+          }
+        return;  // Success - full response received
+      }
+    }
+    delay(10);
+  }
+
+  // Timeout occurred
+  // SerialMon.println("Error: HTTP Paction timeout action failed");
+  SerialMon.println("Error: HTTP Paction timeout — waited " +
+                    String(millis() - cmdSentAt) + "ms after command sent");
+    sendATCommand("AT+HTTPSTATUS?", "OK", 1000);
+  success = false;
+  responseLength = 0;
 }
 
 // Private: Read HTTP Response (Wait for full DATA line)
