@@ -581,13 +581,15 @@ ok_received:
   success = true;
 }
 
-void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLength) {
-  if (!success) return;
+void SIM7600HTTPS::sendATHTTPACTION(bool &success, int method, int &responseLength)
+{
+  if (!success)
+    return;
 
-    clearSerialBuffer(); // Flush any stale RX data
+  clearSerialBuffer(); // Flush any stale RX data
 
   // Send command silently
-    unsigned long cmdSentAt = millis(); // ← stamp exactly when command left
+  unsigned long cmdSentAt = millis(); // ← stamp exactly when command left
   String cmd = "AT+HTTPACTION=" + String(method);
   SerialAT.println(cmd);
   DEBUG_PRINT("Command: ");
@@ -597,15 +599,18 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
   String response = "";
   String expectedStart = "+HTTPACTION: " + String(method) + ",";
   unsigned long startTime = millis();
-  unsigned long timeoutMs = (method == 0) ? 12500UL : 15000UL;  
+  unsigned long timeoutMs = (method == 0) ? 12500UL : 15000UL;
   // GET = 10s, POST = 15s
 
-  while (millis() - startTime < timeoutMs) {  // 60-second timeout
-    while (SerialAT.available()) {
+  while (millis() - startTime < timeoutMs)
+  { // 60-second timeout
+    while (SerialAT.available())
+    {
       char c = SerialAT.read();
       response += c;
       // Check for full response (ends with newline after length)
-      if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1) {
+      if (response.indexOf(expectedStart) != -1 && response.indexOf("\r\n", response.indexOf(expectedStart)) != -1)
+      {
         DEBUG_PRINT("Response: ");
         DEBUG_PRINTLN(response);
         int statusStart = response.indexOf(",", response.indexOf(expectedStart)) + 1;
@@ -619,18 +624,21 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
         responseLength = lengthStr.toInt();
 
         // Log status and length
-        if(method == 0) {  // GET method
+        if (method == 0)
+        { // GET method
           SerialMon.println("GET code: " + String(status) + ",Payload Length: " + String(responseLength));
-        } else if (method == 1) {  // POST method
+        }
+        else if (method == 1)
+        { // POST method
           SerialMon.println("POST code: " + String(status));
         }
 
-
-        if (responseLength < 0) {
-            SerialMon.println("Error: Invalid HTTP action response length");
-            success = false;
-          }
-        return;  // Success - full response received
+        if (responseLength < 0)
+        {
+          SerialMon.println("Error: Invalid HTTP action response length");
+          success = false;
+        }
+        return; // Success - full response received
       }
     }
     delay(10);
@@ -640,7 +648,7 @@ void SIM7600HTTPS::sendATHTTPACTION(bool& success, int method, int& responseLeng
   // SerialMon.println("Error: HTTP Paction timeout action failed");
   SerialMon.println("Error: HTTP Paction timeout — waited " +
                     String(millis() - cmdSentAt) + "ms after command sent");
-    sendATCommand("AT+HTTPSTATUS?", "OK", 1000);
+  sendATCommand("AT+HTTPSTATUS?", "OK", 1000);
   success = false;
   responseLength = 0;
 }
@@ -725,12 +733,10 @@ String SIM7600HTTPS::sendATCommandSilent(String cmd)
 bool SIM7600HTTPS::init()
 {
   bool success = true; // Start with success assumed
-  // sendATCRESET(success);  // Reset module first
-  // delay(2000);
+  sendATCommand("AT+CUSBPIDSWITCH=9018,1,1", "OK", 1000);
   sendAT(success);     // Step 1: Check basic communication
   sendATCPIN(success); // Step 2: Check SIM status
   sendATCSQ(success);  // Step 3: Check signal quality
-                       // sendATCommand("AT+CUSBPIDSWITCH=9018,1,1", "OK", 1000);
   return success;
 }
 
